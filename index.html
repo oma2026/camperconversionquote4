@@ -850,15 +850,23 @@ const SESS_KEY="oma_session_v1";
 const SALES_SEED=["業務共用","Peter","CBC","Allen","Gary"];
 let SALES=SALES_SEED.slice();   // 執行期會由 DB.sales 重建（可在管理後台增刪業務）
 const CARS=["Sunlight Cliff 540","Sunlight Cliff 600","Sunlight Cliff T58","Sunlight Cliff T66S","Sunlight Cliff T67S","Burstner Habiton X","Burstner Habiton Signature"];
-/* 車型限定品項：品項只有「車型名稱包含清單任一關鍵字」（不分大小寫）的車可選；未列出的品項＝所有車型都可選。
-   em3＝電動下拉床，只有 Sunlight Cliff T 系列（T58／T66S／T67S）與 Burstner Habiton Signature 可選。 */
-const CAR_ONLY_ITEMS={ em3:["Cliff T","Signature"] };
+/* 車種分類 B／C：每台車有分類（存 DB.carTypes），每個品項可設定供應車型（it.carType：''＝全車型共用、'B'＝僅B型、'C'＝僅C型）。
+   B型＝Cliff 系列（非T）＋Habiton X；C型＝Cliff T 系列＋Habiton Signature。皆可在管理後台調整。 */
+function carTypeOf(carName){
+  if(typeof DB!=="undefined"&&DB&&DB.carTypes&&DB.carTypes[carName])return DB.carTypes[carName];
+  return /cliff\s*t|signature/i.test(carName||"")?"C":"B";   // 未設定的車型：T系列／Signature→C，其餘→B
+}
+function itemCarType(itemId){const f=findItem(itemId);return (f&&f.item&&f.item.carType)?f.item.carType:"";}
 function carAllowsItem(itemId,carName){
-  const toks=CAR_ONLY_ITEMS[itemId];
-  if(!toks||!toks.length)return true;                 // 未限定 → 所有車型都可
-  const c=String(carName||"").toLowerCase();
-  if(!c)return false;                                  // 有限定但尚未選車 → 先不顯示，避免加到不適用車型
-  return toks.some(t=>c.includes(String(t).toLowerCase()));
+  const t=itemCarType(itemId);
+  if(!t)return true;                     // 共用 → 所有車型都可
+  if(!carName)return false;              // 有限定但尚未選車 → 先不顯示，避免加到不適用車型
+  return carTypeOf(carName)===t;         // 車種分類需相符
+}
+function setCarType(name,type){
+  if(!DB.carTypes||typeof DB.carTypes!=="object")DB.carTypes={};
+  DB.carTypes[name]=(type==="C")?"C":"B";
+  saveDB();renderCatalog();renderQuote();if(unlocked)renderCarMgr();
 }
 const COMPANY={
   nameZh:"歐馬企業股份有限公司",
@@ -1143,6 +1151,12 @@ function normalizeDB(){
   if(!Array.isArray(DB.cars))DB.cars=CARS.slice();   // 車型清單改存 DB，可在管理後台新增／刪除
   if(!Array.isArray(DB.hiddenCars))DB.hiddenCars=[];   // 被隱藏的車型（軟刪除，可還原）
   if(!Array.isArray(DB.customCars))DB.customCars=[];   // 自訂新增的車型
+  if(!DB.carTypes||typeof DB.carTypes!=="object")DB.carTypes={};   // 車種分類 B／C（可在管理後台調整）
+  // 內建車型的 B／C 預設分類（只補沒設過的，不覆蓋管理後台已改的）
+  const _CT_SEED={"Sunlight Cliff 540":"B","Sunlight Cliff 600":"B","Burstner Habiton X":"B","Sunlight Cliff T58":"C","Sunlight Cliff T66S":"C","Sunlight Cliff T67S":"C","Burstner Habiton Signature":"C"};
+  Object.keys(_CT_SEED).forEach(k=>{if(!DB.carTypes[k])DB.carTypes[k]=_CT_SEED[k];});
+  // 一次性：電動下拉床(em3) 預設為「僅C型車」（沿用原本只有T系列／Signature可選的規則）
+  DB.categories.forEach(c=>c.subs.forEach(s=>s.items.forEach(it=>{if(it.id==="em3"&&it.carType==null)it.carType="C";})));
   if(!DB.itemRound||typeof DB.itemRound!=="object")DB.itemRound={method:"floor",to:100};   // 品項取整（預設無條件捨去到百位＝原本行為）
   if(!DB.totalRound||typeof DB.totalRound!=="object")DB.totalRound={method:"none",to:1};   // 總計取整（預設不取整，到元）
   if(DB.depositPct==null||isNaN(DB.depositPct))DB.depositPct=30;   // 訂金比例（%）
@@ -1851,7 +1865,7 @@ function importCustomerCode(codeRaw){
 }
 function customerData(){
   return {
-    pin:((DB.sales&&DB.sales.custBase)||CUSTOMER_PIN), logo:LOGO_SVG, title:COMPANY.nameZh, cars:visibleCars(), totalRound:(DB.totalRound||{method:"none",to:1}), depositPct:depositPctVal(), excl:[acIds()].concat(EXCL_GROUPS), reqWire:{ac:acIds(),ws:reqAcIds()}, carOnly:CAR_ONLY_ITEMS,
+    pin:((DB.sales&&DB.sales.custBase)||CUSTOMER_PIN), logo:LOGO_SVG, title:COMPANY.nameZh, cars:visibleCars(), totalRound:(DB.totalRound||{method:"none",to:1}), depositPct:depositPctVal(), excl:[acIds()].concat(EXCL_GROUPS), reqWire:{ac:acIds(),ws:reqAcIds()}, carTypes:(DB.carTypes||{}),
     reps:(DB.sales&&DB.sales.list||[]).map(r=>{return {k:r.key,l:(r.zh?r.zh+" ":"")+r.key,code:repCustCode(r)};}),
     cats:DB.categories.map(c=>({
       name:c.name,
@@ -1860,7 +1874,7 @@ function customerData(){
         items:s.items.map(it=>({
           id:it.id, name:it.name, model:it.model||"",
           price:retail(it), photo:it.photo||"",
-          incl:(Number(it.laborHours)||0)===0
+          incl:(Number(it.laborHours)||0)===0, carType:it.carType||""
         }))
       }))
     }))
@@ -1940,7 +1954,8 @@ function tryPin(){var nm=(document.getElementById("cname").value||"").trim();var
 function renderReps(){var h="";D.reps.forEach(function(r){h+='<button class="rp '+(chosenRep==r.k?"on":"")+'" data-rep="'+r.k+'">'+r.l+'</button>';});document.getElementById("reps").innerHTML=h;}
 function setCat(c){active=c;renderCat();}
 function exclOf(id){var gs=D.excl||[];for(var i=0;i<gs.length;i++){if(gs[i].indexOf(id)>=0)return gs[i];}return null;}
-function carAllows(id){var m=D.carOnly&&D.carOnly[id];if(!m||!m.length)return true;var c=String(custCar||"").toLowerCase();if(!c)return false;for(var i=0;i<m.length;i++){if(c.indexOf(String(m[i]).toLowerCase())>=0)return true;}return false;}
+function custCarType(){var m=D.carTypes||{};if(m[custCar])return m[custCar];var c=(custCar||"").toLowerCase();return (c.indexOf("cliff t")>=0||c.indexOf("signature")>=0)?"C":"B";}
+function carAllows(id){var it=IDX[id];var t=(it&&it.carType)||"";if(!t)return true;if(!custCar)return false;return custCarType()===t;}
 function isReqAc(id){return !!(D.reqWire&&D.reqWire.ws&&D.reqWire.ws.indexOf(id)>=0);}
 function acSelected(){return !!(D.reqWire&&D.reqWire.ac&&D.reqWire.ac.some(function(a){return cart[a];}));}
 function tog(id){
@@ -2320,9 +2335,25 @@ function renderPrintDoc(o){
       </div>
       </div>
     </div>`;
-  const _logo=document.querySelector("#printDoc img");
-  if(_logo && !_logo.complete){ _logo.onload=()=>window.print(); _logo.onerror=()=>window.print(); }
-  else { setTimeout(()=>window.print(),60); }
+  printNow();
+}
+/* 列印／存 PDF：桌機沿用頁內列印；手機改開新分頁＋大按鈕（在新分頁的點擊手勢中觸發列印，iOS／Android 才不會被擋）。 */
+function printNow(){
+  var pd=document.getElementById("printDoc");
+  var inner=pd?pd.innerHTML:"";
+  var isMobile=/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent||"")||(window.matchMedia&&window.matchMedia("(max-width:960px)").matches);
+  if(isMobile&&inner){
+    var css="";document.querySelectorAll("style").forEach(function(s){css+=(s.textContent||"");});
+    var w=window.open("","_blank");
+    if(!w){alert("請允許此網站開啟新分頁（彈出視窗），才能列印或存成 PDF。");return;}
+    w.document.open();
+    w.document.write('<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>歐馬 · 列印 / 存 PDF</title><style>'+css+'</style><style>html,body{margin:0;background:#eee}#printDoc{display:block!important;background:#fff;margin:0 auto;padding:14px;overflow-x:auto}#pbar{position:sticky;top:0;z-index:9;display:flex;gap:8px;padding:10px 12px;background:#171717}#pbar button{flex:1;padding:13px;border:0;border-radius:10px;font-size:16px;font-weight:800}#pbar .go{background:#c9922b;color:#fff}#pbar .cl{background:#555;color:#fff}@media print{#pbar{display:none!important}html,body{background:#fff}}</style></head><body><div id="pbar"><button class="go" onclick="window.print()">列印 / 存成 PDF</button><button class="cl" onclick="window.close()">關閉</button></div><div id="printDoc">'+inner+'</div></body></html>');
+    w.document.close();
+    return;
+  }
+  var _logo=document.querySelector("#printDoc img");
+  if(_logo && !_logo.complete){ _logo.onload=function(){window.print();}; _logo.onerror=function(){window.print();}; }
+  else { setTimeout(function(){window.print();},60); }
 }
 function printContractDoc(recordId){
   const r=(SESSION.records||[]).find(x=>x.id===recordId);
@@ -2413,9 +2444,7 @@ function printContractDoc(recordId){
       <div class="pc-signrow"><div>買方簽名 / 蓋章　日期：__________</div><div>賣方（蓋章）　日期：__________</div></div>
       <div class="pc-cno">合約編號：${cno}</div>
     </div>`;
-  const _logo=document.querySelector("#printDoc img");
-  if(_logo && !_logo.complete){ _logo.onload=()=>window.print(); _logo.onerror=()=>window.print(); }
-  else { setTimeout(()=>window.print(),60); }
+  printNow();
 }
 function reprintRecord(id){
   const r=(SESSION.records||[]).find(x=>x.id===id);if(!r)return;
@@ -2468,8 +2497,9 @@ function renderCashier(){
       <td class="num">NT$${fmt(rv)}</td>
       <td class="num">NT$${fmt(r.totalCost)}</td>
       <td style="text-align:center"><button class="abtn" style="${r.paid?'background:#2f7d4f;color:#fff;border-color:#2f7d4f':''}" onclick="toggleCashier('${r.id}')">${r.paid?'已收款':'未收款'}</button></td>
+      <td style="text-align:center"><div style="display:flex;flex-direction:column;gap:4px"><button class="abtn rec-print" onclick="reprintRecord('${r.id}')">📄 報價單</button><button class="abtn rec-print" onclick="printContractDoc('${r.id}')">📄 合約書</button></div></td>
     </tr>`;
-  }).join(""):`<tr><td colspan="6" style="color:var(--ink-soft)">${cashierPayFilter!=="all"?(cashierPayFilter==="paid"?"目前沒有「已收款」的訂單。":"目前沒有「未收款」的訂單，全部收齊了！"):((cashierFilter.y||cashierFilter.m)?"這個期間沒有已成交的訂單。":"還沒有已成交的訂單。")}</td></tr>`;
+  }).join(""):`<tr><td colspan="7" style="color:var(--ink-soft)">${cashierPayFilter!=="all"?(cashierPayFilter==="paid"?"目前沒有「已收款」的訂單。":"目前沒有「未收款」的訂單，全部收齊了！"):((cashierFilter.y||cashierFilter.m)?"這個期間沒有已成交的訂單。":"還沒有已成交的訂單。")}</td></tr>`;
   p.innerHTML=`
     <div style="text-align:right;margin-bottom:8px"><button class="abtn" onclick="changeRolePin('cashier')">變更出納密碼</button></div>
     <h3 class="admin-sec">出納總覽（已成交）</h3>
@@ -2489,7 +2519,7 @@ function renderCashier(){
       <div class="acct-card"><div class="ac-lbl">應付供應商</div><div class="ac-val">NT$${fmt(payAll)}</div></div>
     </div>
     <p style="font-size:13px;color:var(--ink-soft);margin:12px 0 4px">應收以「成交價」為準（未填則以報價）。按「未收款／已收款」切換收款狀態。</p>
-    <table class="rec-table"><thead><tr><th>日期</th><th>業務</th><th>客戶</th><th class="num">應收</th><th class="num">應付</th><th style="text-align:center">收款</th></tr></thead>
+    <table class="rec-table"><thead><tr><th>日期</th><th>業務</th><th>客戶</th><th class="num">應收</th><th class="num">應付</th><th style="text-align:center">收款</th><th style="text-align:center">列印</th></tr></thead>
     <tbody>${rows}</tbody></table>`;
 }
 function renderTech(){
@@ -2594,9 +2624,7 @@ function printTech(id){
       <div style="border:1px solid #000;height:22mm;margin-top:2mm"></div>
       <div style="margin-top:10mm;font-size:11pt;display:flex;gap:24mm"><span>技師簽名：________________</span><span>完工日期：________________</span></div>
     </div>`;
-  const _logo=document.querySelector("#printDoc img");
-  if(_logo && !_logo.complete){ _logo.onload=()=>window.print(); _logo.onerror=()=>window.print(); }
-  else { setTimeout(()=>window.print(),60); }
+  printNow();
 }
 function renderAcct(){
   const p=document.getElementById("acctPanel");
@@ -2617,8 +2645,9 @@ function renderAcct(){
       <td class="num">NT$${fmt(r.totalCost)}</td>
       <td class="num" style="color:#2f7d4f">NT$${fmt(pf)}</td>
       <td class="num">${m.toFixed(0)}%</td>
+      <td style="text-align:center"><div style="display:flex;flex-direction:column;gap:4px"><button class="abtn rec-print" onclick="reprintRecord('${r.id}')">📄 報價單</button><button class="abtn rec-print" onclick="printContractDoc('${r.id}')">📄 合約書</button></div></td>
     </tr>`;
-  }).join(""):`<tr><td colspan="8" style="color:var(--ink-soft)">${(acctFilter.y||acctFilter.m)?"這個期間沒有已成交的訂單。":"還沒有已成交的訂單。到「管理後台」或業務「成交管理」把訂單標記成交後就會出現。"}</td></tr>`;
+  }).join(""):`<tr><td colspan="9" style="color:var(--ink-soft)">${(acctFilter.y||acctFilter.m)?"這個期間沒有已成交的訂單。":"還沒有已成交的訂單。到「管理後台」或業務「成交管理」把訂單標記成交後就會出現。"}</td></tr>`;
   p.innerHTML=`
     <div style="text-align:right;margin-bottom:8px"><button class="abtn" onclick="changeRolePin('acct')">變更會計密碼</button></div>
     <h3 class="admin-sec">會計總覽（已成交）</h3>
@@ -2630,9 +2659,9 @@ function renderAcct(){
       <div class="acct-card"><div class="ac-lbl">毛利合計</div><div class="ac-val" style="color:#2f7d4f">NT$${fmt(profit)} <span style="font-size:14px;color:var(--ink-soft)">(${mp.toFixed(0)}%)</span></div></div>
     </div>
     <p style="font-size:13px;color:var(--ink-soft);margin:12px 0 4px">營收以「成交價」為準；未填成交價的以「報價」計算。</p>
-    <table class="rec-table"><thead><tr><th>日期</th><th>業務</th><th>客戶</th><th class="num">報價</th><th class="num">成交價</th><th class="num">成本</th><th class="num">毛利</th><th class="num">毛利率</th></tr></thead>
+    <table class="rec-table"><thead><tr><th>日期</th><th>業務</th><th>客戶</th><th class="num">報價</th><th class="num">成交價</th><th class="num">成本</th><th class="num">毛利</th><th class="num">毛利率</th><th style="text-align:center">列印</th></tr></thead>
     <tbody>${rows}</tbody>
-    <tfoot><tr><td>合計</td><td></td><td></td><td class="num"><b>NT$${fmt(quoteSum)}</b></td><td class="num"><b>NT$${fmt(rev)}</b></td><td class="num"><b>NT$${fmt(cost)}</b></td><td class="num"><b>NT$${fmt(profit)}</b></td><td class="num"><b>${mp.toFixed(0)}%</b></td></tr></tfoot></table>`;
+    <tfoot><tr><td>合計</td><td></td><td></td><td class="num"><b>NT$${fmt(quoteSum)}</b></td><td class="num"><b>NT$${fmt(rev)}</b></td><td class="num"><b>NT$${fmt(cost)}</b></td><td class="num"><b>NT$${fmt(profit)}</b></td><td class="num"><b>${mp.toFixed(0)}%</b></td><td></td></tr></tfoot></table>`;
 }
 function buyerOrders(){
   // 列出每一筆「已成交」的紀錄（不再依客戶去重複）
@@ -2773,9 +2802,7 @@ function printPurchase(id){
       <div style="border:1px solid #000;height:22mm;margin-top:2mm"></div>
       <div style="margin-top:10mm;font-size:11pt;display:flex;gap:24mm"><span>採購簽名：________________</span><span>備齊日期：________________</span></div>
     </div>`;
-  const _logo=document.querySelector("#printDoc img");
-  if(_logo && !_logo.complete){ _logo.onload=()=>window.print(); _logo.onerror=()=>window.print(); }
-  else { setTimeout(()=>window.print(),60); }
+  printNow();
 }
 function recordQuote(name,car){
   const items=Object.keys(quote).map(id=>{
@@ -2956,8 +2983,9 @@ function renderAdmin(){
   const p=document.getElementById("adminPanel");
   let rows="";
   DB.categories.forEach((cat,ci)=>{
-    rows+=`<tr class="catrow"><td colspan="10">${cat.name}</td></tr>`;
+    rows+=`<tr class="catrow"><td colspan="10"><input class="textin" value="${(cat.name||'').replace(/"/g,'&quot;')}" onchange="setCatName(${ci},this.value)" style="font-weight:800;font-size:15px;max-width:280px;background:#fff"></td></tr>`;
     cat.subs.forEach((sub,si)=>{
+      rows+=`<tr class="subrow"><td colspan="10" style="background:#f4f3ee"><span style="font-size:12px;color:var(--ink-soft);font-weight:700;margin:0 8px 0 6px">小分類</span><input class="textin" value="${(sub.name||'').replace(/"/g,'&quot;')}" onchange="setSubName(${ci},${si},this.value)" style="font-weight:800;max-width:240px;background:#fff"><button class="delrow" title="刪除此小分類（需先清空品項）" onclick="delSub(${ci},${si})" style="margin-left:8px">🗑 刪分類</button></td></tr>`;
       sub.items.forEach((it,ii)=>{
         const price=retail(it);
         let margin="",mcls="";
@@ -2966,7 +2994,7 @@ function renderAdmin(){
           <td style="color:var(--ink-soft);font-size:13.5px">${sub.name}</td>
           <td><input class="textin" value="${(it.name||'').replace(/"/g,'&quot;')}" onchange="setField('${it.id}','name',this.value)"></td>
           <td><input class="textin" style="min-width:90px" value="${(it.model||'').replace(/"/g,'&quot;')}" onchange="setField('${it.id}','model',this.value)"></td>
-          <td class="num" style="color:var(--rust);font-weight:700">${it.cost==null?'<span style="color:var(--ink-soft);font-weight:400">待採購填</span>':fmt(it.cost)}</td>
+          <td class="num"><input class="cellin cost" type="number" min="0" step="100" value="${it.cost==null?'':it.cost}" placeholder="待填" onchange="setCost('${it.id}',this.value)" style="width:82px;color:var(--rust);font-weight:700"></td>
           <td class="num"><div style="display:flex;align-items:center;justify-content:flex-end;gap:3px">
               <input class="cellin" style="width:52px" type="number" min="0" step="0.5" value="${it.laborHours}" onchange="setLaborHours('${it.id}',this.value)"><span style="font-size:12.5px;color:var(--ink-soft)">時 ×</span>
               <input class="cellin" style="width:58px" type="number" min="0" step="50" value="${it.laborRate}" onchange="setItemRate('${it.id}',this.value)"><span style="font-size:12.5px;color:var(--ink-soft)">/時</span>
@@ -2975,12 +3003,13 @@ function renderAdmin(){
           <td class="num"><input class="cellin" style="width:62px" type="number" step="0.01" value="${it.coef}" onchange="setItemCoef('${it.id}',this.value)"></td>
           <td class="num">${price==null?'<span class="tbd-cell">待定</span>':'NT$'+fmt(price)}</td>
           <td class="num ${mcls}">${margin||'—'}</td>
-          <td><input class="textin" style="min-width:120px;font-size:13.5px" value="${(it.note||'').replace(/"/g,'&quot;')}" placeholder="備註" onchange="setField('${it.id}','note',this.value)">${(Number(it.laborHours)||0)===0?'<div style="font-size:11.5px;color:#2f7d4f;font-weight:700;margin-top:3px">✓ 已含工資（自動）</div>':''}</td>
+          <td><select onchange="setField('${it.id}','carType',this.value)" title="這個品項供應哪類車" style="width:100%;padding:3px;border:1px solid var(--line-2);border-radius:6px;font-size:12.5px;margin-bottom:4px;font-weight:700"><option value="" ${!it.carType?'selected':''}>供應：全車型共用</option><option value="B" ${it.carType==='B'?'selected':''}>僅 B 型車</option><option value="C" ${it.carType==='C'?'selected':''}>僅 C 型車</option></select><input class="textin" style="min-width:120px;font-size:13.5px" value="${(it.note||'').replace(/"/g,'&quot;')}" placeholder="備註" onchange="setField('${it.id}','note',this.value)">${(Number(it.laborHours)||0)===0?'<div style="font-size:11.5px;color:#2f7d4f;font-weight:700;margin-top:3px">✓ 已含工資（自動）</div>':''}</td>
           <td style="text-align:center;white-space:nowrap"><button class="delrow" title="上移" onclick="moveItem('${it.id}',-1)">▲</button><button class="delrow" title="下移" onclick="moveItem('${it.id}',1)">▼</button><button class="delrow" title="刪除" onclick="delItem('${it.id}')">🗑</button></td>
         </tr>`;
       });
       rows+=`<tr><td></td><td colspan="9"><button class="additem" onclick="addItem(${ci},${si})">＋ 在「${sub.name}」新增品項</button></td></tr>`;
     });
+    rows+=`<tr><td></td><td colspan="9"><button class="additem" onclick="addSub(${ci})" style="border-style:dashed">＋ 在「${cat.name}」新增小分類</button></td></tr>`;
   });
   p.innerHTML=`
     <div class="admin-top">
@@ -3063,12 +3092,12 @@ function renderAdmin(){
     <div class="tablewrap"><table>
       <thead><tr>
         <th>小分類</th><th>品項名稱</th><th>型號</th><th class="num">成本</th>
-        <th class="num">工資（內含）</th><th class="num">係數</th><th class="num">零售價</th><th class="num">毛利率</th><th>備註</th><th></th>
+        <th class="num">工資（內含）</th><th class="num">係數</th><th class="num">零售價</th><th class="num">毛利率</th><th>供應車型 / 備註</th><th></th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
     <div class="hint">
-      · <b>成本欄</b>（紅字）由<b>採購部門</b>在「採購 → 產品管理」輸入，這裡只顯示、不可改；業務端完全隱藏。留空（待採購填）＝該品項顯示「價格待定」。<br>
+      · <b>成本欄</b>（紅字）可在這裡直接輸入／修改，也可由<b>採購部門</b>在「採購 → 產品管理」填，兩邊即時同步；業務端完全隱藏。留空＝該品項顯示「價格待定」。<br>
       · <b>係數</b>由管理後台在這裡設定：零售價 ＝ 成本 × 係數 ＋ 工時 × 工資費率，取整方式見上方「取整（進位）設定」。<br>
       · <b>工資（加到售價）</b>：技術部填工時（小時），乘上該品項費率（每小時）＝工資金額，會<b>加到零售價上</b>，但<b>不影響成本</b>。每個品項費率可不同；工時預設 0（0＝不另加工資）。<br>
       · 改完即時儲存並<b>同步到雲端</b>，其他人／其他裝置也會一起更新。要另外備份可用右上角 <code>⚙</code> 或此頁「匯出備份」。<br>
@@ -3181,15 +3210,18 @@ function renderCarMgr(){
   const hidden=new Set(DB.hiddenCars||[]);
   const chip=(name,custom)=>{
     const isHidden=hidden.has(name);
+    const ct=carTypeOf(name);
     return `<span style="display:inline-flex;align-items:center;gap:8px;background:${isHidden?'#f0efe9':'var(--card)'};border:1px solid var(--line-2);border-radius:999px;padding:6px 8px 6px 14px;font-size:14px;font-weight:700;${isHidden?'color:var(--ink-soft)':''}">
       ${esc(name)}${isHidden?' <span style="font-size:11px;font-weight:600">(已隱藏)</span>':''}${custom?' <span style="font-size:11px;color:var(--rust);font-weight:600">自訂</span>':''}
+      <select onchange="setCarType('${name.replace(/'/g,"\\'")}',this.value)" title="車種分類 B／C" style="border:1px solid var(--line-2);border-radius:6px;padding:2px 4px;font-size:12px;font-weight:700;background:var(--card)"><option value="B" ${ct==='B'?'selected':''}>B型</option><option value="C" ${ct==='C'?'selected':''}>C型</option></select>
       <button class="delrow" title="${isHidden?'顯示':'隱藏'}" onclick="toggleHideCar('${name.replace(/'/g,"\\'")}')">${isHidden?'👁 顯示':'🚫 隱藏'}</button>
       ${custom?`<button class="delrow" title="刪除自訂車型" onclick="deleteCustomCar('${name.replace(/'/g,"\\'")}')">🗑</button>`:''}
     </span>`;
   };
   const builtin=CARS.map(c=>chip(c,false)).join("");
   const custom=(DB.customCars||[]).map(c=>chip(c,true)).join("");
-  box.innerHTML=`<div style="margin-bottom:6px;font-size:13px;font-weight:800;color:var(--ink-soft)">內建車型</div>
+  box.innerHTML=`<div style="font-size:13px;color:var(--ink-soft);line-height:1.7;margin-bottom:10px;padding:8px 12px;background:#f7f7f5;border-radius:8px">每台車可分成 <b>B型</b> 或 <b>C型</b>（下方每台車右邊可切換）。到「成本與定價」的<b>「供應車型」</b>可設定某個品項只供應 B 型或 C 型車（選「共用」＝所有車都能選）。改完業務端／客戶端可選的品項會立即跟著變。</div>
+    <div style="margin-bottom:6px;font-size:13px;font-weight:800;color:var(--ink-soft)">內建車型</div>
     <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px">${builtin}</div>
     ${(DB.customCars||[]).length?`<div style="margin-bottom:6px;font-size:13px;font-weight:800;color:var(--ink-soft)">自訂車型</div><div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px">${custom}</div>`:''}
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -3306,6 +3338,10 @@ function moveCar(i,dir){
   const arr=DB.cars||[];const j=i+dir;if(j<0||j>=arr.length)return;
   const t=arr[i];arr[i]=arr[j];arr[j]=t;saveDB();populateCarSelect();if(unlocked)renderAdmin();
 }
+function setCatName(ci,v){v=(v||"").trim();if(!v){toast("分類名稱不能空白");if(unlocked)renderAdmin();return;}DB.categories[ci].name=v;saveDB();renderCatalog();renderQuote();if(unlocked)renderAdmin();if(buyerUnlocked)renderBuyer();}
+function setSubName(ci,si,v){v=(v||"").trim();const cur=DB.categories[ci].subs[si];if(!cur)return;if(!v){toast("小分類名稱不能空白");if(unlocked)renderAdmin();return;}if(cur.name==="冷氣本體"&&v!=="冷氣本體"&&!confirm("「冷氣本體」是『選冷氣自動帶標配』的判斷依據，改名後這個自動功能會失效。確定要改名嗎？")){if(unlocked)renderAdmin();return;}cur.name=v;saveDB();renderCatalog();renderQuote();if(unlocked)renderAdmin();if(buyerUnlocked)renderBuyer();}
+function addSub(ci){const name=(prompt("新增小分類名稱：","新分類")||"").trim();if(!name)return;if(!Array.isArray(DB.categories[ci].subs))DB.categories[ci].subs=[];DB.categories[ci].subs.push({name:name,items:[]});saveDB();renderCatalog();renderQuote();if(unlocked)renderAdmin();if(buyerUnlocked)renderBuyer();toast("已新增小分類");}
+function delSub(ci,si){const sub=DB.categories[ci].subs[si];if(!sub)return;if(sub.items&&sub.items.length){alert("「"+sub.name+"」還有 "+sub.items.length+" 個品項，請先刪除或搬移品項，才能刪除這個小分類。");return;}if(!confirm("確定刪除小分類「"+sub.name+"」？"))return;DB.categories[ci].subs.splice(si,1);saveDB();renderCatalog();renderQuote();if(unlocked)renderAdmin();if(buyerUnlocked)renderBuyer();toast("已刪除小分類");}
 function addItem(ci,si){
   const nid="x"+Date.now().toString(36);
   const dk=DB.categories[ci].coef||1.25;
