@@ -2310,11 +2310,11 @@ function renderPrintDoc(o){
       </div>
       <table class="pd-table">
         <thead><tr>
-          <th class="c" style="width:9%">序號</th>
-          <th style="width:40%">品項</th>
-          <th class="c" style="width:16%">數量</th>
-          <th class="r" style="width:17.5%">單價</th>
-          <th class="r" style="width:17.5%">金額</th>
+          <th class="c" style="width:8%">序號</th>
+          <th style="width:46%">品項</th>
+          <th class="c" style="width:10%">數量</th>
+          <th class="r" style="width:18%">單價</th>
+          <th class="r" style="width:18%">金額</th>
         </tr></thead>
         <tbody>${o.rowsHtml}</tbody>
       </table>
@@ -2710,14 +2710,16 @@ function renderBuyer(){
   }).join(""):`<div class="rec-empty">${(buyerPurFilter!=="all")?(buyerPurFilter==="done"?"目前沒有「已採買」的訂單。":"目前沒有「未採買」的訂單，太棒了！"):((buyerFilter.y||buyerFilter.m)?"這個期間沒有已成交的訂單。":"還沒有「已成交」的訂單。請到「管理後台 → 業務報價紀錄」，把成交的那筆按「✓ 標記為已成交」，這裡才會出現。")}</div>`;
   let prodRows="";
   DB.categories.forEach((cat,ci)=>{
-    prodRows+=`<tr class="catrow"><td colspan="6">${esc(cat.name)}</td></tr>`;
+    prodRows+=`<tr class="catrow"><td colspan="7"><input class="textin" value="${(cat.name||'').replace(/"/g,'&quot;')}" onchange="setCatName(${ci},this.value)" style="font-weight:800;font-size:15px;max-width:280px;background:#fff"></td></tr>`;
     cat.subs.forEach((sub,si)=>{
+      prodRows+=`<tr class="subrow"><td colspan="7" style="background:#f4f3ee"><span style="font-size:12px;color:var(--ink-soft);font-weight:700;margin:0 8px 0 6px">小分類</span><input class="textin" value="${(sub.name||'').replace(/"/g,'&quot;')}" onchange="setSubName(${ci},${si},this.value)" style="font-weight:800;max-width:240px;background:#fff"><button class="delrow" title="刪除此小分類（需先清空品項）" onclick="delSub(${ci},${si})" style="margin-left:8px">🗑 刪分類</button></td></tr>`;
       sub.items.forEach(it=>{
         prodRows+=`<tr>
           <td style="color:var(--ink-soft);font-size:13px;white-space:nowrap">${esc(sub.name)}</td>
           <td><input class="textin" value="${(it.name||'').replace(/"/g,'&quot;')}" onchange="setField('${it.id}','name',this.value)"></td>
           <td><input class="textin" style="min-width:90px" value="${(it.model||'').replace(/"/g,'&quot;')}" onchange="setField('${it.id}','model',this.value)"></td>
           <td class="num"><input class="cellin cost" type="number" value="${it.cost==null?'':it.cost}" placeholder="待填" onchange="setCost('${it.id}',this.value)"></td>
+          <td style="text-align:center"><select onchange="setField('${it.id}','carType',this.value)" title="這個品項供應哪類車" style="padding:3px;border:1px solid var(--line-2);border-radius:6px;font-size:12.5px;font-weight:700"><option value="" ${!it.carType?'selected':''}>共用</option><option value="B" ${it.carType==='B'?'selected':''}>僅B型</option><option value="C" ${it.carType==='C'?'selected':''}>僅C型</option></select></td>
           <td style="text-align:center;white-space:nowrap">
             ${it.photo?`<img src="${it.photo}" style="width:80px;height:80px;object-fit:cover;border-radius:10px;border:1px solid var(--line-2);vertical-align:middle">`:'<span style="color:var(--ink-soft);font-size:12px">無照片</span>'}
             <div style="margin-top:4px;display:flex;gap:4px;justify-content:center">
@@ -2729,8 +2731,9 @@ function renderBuyer(){
           <td style="text-align:center;white-space:nowrap"><button class="delrow" title="上移" onclick="moveItem('${it.id}',-1)">▲</button><button class="delrow" title="下移" onclick="moveItem('${it.id}',1)">▼</button><button class="delrow" title="刪除品項" onclick="delItem('${it.id}')">🗑</button></td>
         </tr>`;
       });
-      prodRows+=`<tr><td></td><td colspan="5"><button class="additem" onclick="addItem(${ci},${si})">＋ 在「${sub.name}」新增品項</button></td></tr>`;
+      prodRows+=`<tr><td></td><td colspan="6"><button class="additem" onclick="addItem(${ci},${si})">＋ 在「${sub.name}」新增品項</button></td></tr>`;
     });
+    prodRows+=`<tr><td></td><td colspan="6"><button class="additem" onclick="addSub(${ci})" style="border-style:dashed">＋ 在「${cat.name}」新增小分類</button></td></tr>`;
   });
   p.innerHTML=`
     <div style="text-align:right;margin-bottom:8px"><button class="abtn" onclick="changeRolePin('buyer')">變更採購密碼</button></div>
@@ -2750,9 +2753,9 @@ function renderBuyer(){
     <h3 class="admin-sec" style="margin-top:24px">各筆訂單採購明細</h3>
     <div class="rec-list">${recs}</div>
     <h3 class="admin-sec" style="margin-top:28px">產品管理</h3>
-    <p style="font-size:14px;color:var(--ink-soft);margin:2px 0 10px">新增品項、修改名稱／型號、<b>輸入成本</b>、上傳照片，會同步到業務端與客戶選配單。</p>
+    <p style="font-size:14px;color:var(--ink-soft);margin:2px 0 10px">新增／編輯品項、名稱／型號、<b>成本</b>、照片，也可改<b>大／小分類名稱</b>與<b>供應車型（共用／僅B型／僅C型）</b>，都會即時同步到業務端、客戶選配單與管理後台。<br>（車輛本身的 B型／C型 分類在「管理後台 → 車型管理」設定。）</p>
     <div class="tablewrap"><table>
-      <thead><tr><th>小分類</th><th>品項名稱</th><th>型號</th><th class="num">成本</th><th style="text-align:center">照片</th><th></th></tr></thead>
+      <thead><tr><th>小分類</th><th>品項名稱</th><th>型號</th><th class="num">成本</th><th style="text-align:center">供應車型</th><th style="text-align:center">照片</th><th></th></tr></thead>
       <tbody>${prodRows}</tbody>
     </table></div>`;
 }
@@ -3003,7 +3006,7 @@ function renderAdmin(){
           <td class="num"><input class="cellin" style="width:62px" type="number" step="0.01" value="${it.coef}" onchange="setItemCoef('${it.id}',this.value)"></td>
           <td class="num">${price==null?'<span class="tbd-cell">待定</span>':'NT$'+fmt(price)}</td>
           <td class="num ${mcls}">${margin||'—'}</td>
-          <td><select onchange="setField('${it.id}','carType',this.value)" title="這個品項供應哪類車" style="width:100%;padding:3px;border:1px solid var(--line-2);border-radius:6px;font-size:12.5px;margin-bottom:4px;font-weight:700"><option value="" ${!it.carType?'selected':''}>供應：全車型共用</option><option value="B" ${it.carType==='B'?'selected':''}>僅 B 型車</option><option value="C" ${it.carType==='C'?'selected':''}>僅 C 型車</option></select><input class="textin" style="min-width:120px;font-size:13.5px" value="${(it.note||'').replace(/"/g,'&quot;')}" placeholder="備註" onchange="setField('${it.id}','note',this.value)">${(Number(it.laborHours)||0)===0?'<div style="font-size:11.5px;color:#2f7d4f;font-weight:700;margin-top:3px">✓ 已含工資（自動）</div>':''}</td>
+          <td style="min-width:148px"><div style="display:flex;gap:5px;align-items:center"><select onchange="setField('${it.id}','carType',this.value)" title="供應車型（共用／僅B型／僅C型）" style="padding:3px 4px;border:1px solid var(--line-2);border-radius:6px;font-size:12px;font-weight:700;flex:none"><option value="" ${!it.carType?'selected':''}>共用</option><option value="B" ${it.carType==='B'?'selected':''}>僅B型</option><option value="C" ${it.carType==='C'?'selected':''}>僅C型</option></select><input class="textin" style="flex:1;min-width:60px;font-size:13px" value="${(it.note||'').replace(/"/g,'&quot;')}" placeholder="備註" onchange="setField('${it.id}','note',this.value)"></div>${(Number(it.laborHours)||0)===0?'<div style="font-size:11.5px;color:#2f7d4f;font-weight:700;margin-top:3px">✓ 已含工資（自動）</div>':''}</td>
           <td style="text-align:center;white-space:nowrap"><button class="delrow" title="上移" onclick="moveItem('${it.id}',-1)">▲</button><button class="delrow" title="下移" onclick="moveItem('${it.id}',1)">▼</button><button class="delrow" title="刪除" onclick="delItem('${it.id}')">🗑</button></td>
         </tr>`;
       });
