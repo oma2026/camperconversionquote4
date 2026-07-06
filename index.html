@@ -884,7 +884,7 @@ const QUOTE_NOTES=[
   "改裝項目保固依原廠或本公司規定辦理，人為損壞不在保固範圍。"
 ];
 /* 合約書用：賣方統一編號、負責人、匯款帳戶。請填入實際資料（留空會在合約上印底線供手填）。 */
-const OMA_SELLER={ taxId:"", owner:"", bankName:"", bankAcctName:"歐馬企業股份有限公司", bankAcctNo:"" };
+const OMA_SELLER={ taxId:"85072476", owner:"羅達仁", bankName:"", bankAcctName:"歐馬企業股份有限公司", bankAcctNo:"" };
 /* 合約書條款範本（每條一項，依序印在合約上，可自行增修）。建議先經貴公司法務／顧問確認再對外使用。 */
 const CONTRACT_TERMS=[
   "【契約標的與客製化】買受人確認本契約標的為依買受人需求所為之車輛改裝／客製化給付，內容包括但不限於車型、改裝項目、電動設備、影音安全、木作內裝、外觀配件、特殊訂製配備或其他買受人指定事項；上列改裝內容及規格已經買受人確認無誤。",
@@ -2363,7 +2363,7 @@ function printContractDoc(recordId){
       <div class="pc-sec">買賣標的</div>
       <div class="pc-veh">
         <div><span>買方</span>${esc(r.cust.name&&r.cust.name!=="—"?r.cust.name:U)}</div><div><span>訂購日期</span>${today}</div>
-        <div><span>車型</span>${esc(r.cust.car&&r.cust.car!=="—"?r.cust.car:U)}</div><div><span>車身號碼</span>${esc(r.cust.vin||"客製化改裝（待施工）")}</div>
+        <div><span>車型</span>${esc(r.cust.car&&r.cust.car!=="—"?r.cust.car:U)}</div><div><span>車身號碼</span>${esc(r.cust.vin||"客製化新車（待生產）")}</div>
       </div>
       <table class="pd-table" style="margin-top:3mm">
         <thead><tr><th class="c" style="width:10%">序號</th><th style="width:56%">訂購標的（改裝項目 / 配備）</th><th class="c" style="width:14%">數量</th><th class="r" style="width:20%">金額</th></tr></thead>
