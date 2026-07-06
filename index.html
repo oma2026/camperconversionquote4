@@ -419,12 +419,13 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 /* print — only the formatted quote document is shown */
 #printDoc{display:none}
 @media print{
-  body{background:#fff}
-  #bizView,#adminView,#buyerView,#acctView,#techView,#cashierView,#mobar,.topbar,.toast,#setModal,.modal-back,.modal-ov,#quotePanel{display:none!important}
-  #printDoc{display:block!important}
+  /* 只有「程式列印」(body 有 app-printing) 才隱藏頁面、只印 #printDoc；使用者自己按 Cmd+P／右鍵列印會印正常頁面。 */
+  body.app-printing{background:#fff}
+  body.app-printing #bizView,body.app-printing #adminView,body.app-printing #buyerView,body.app-printing #acctView,body.app-printing #techView,body.app-printing #cashierView,body.app-printing #mobar,body.app-printing .topbar,body.app-printing .toast,body.app-printing #setModal,body.app-printing .modal-back,body.app-printing .modal-ov,body.app-printing #quotePanel{display:none!important}
+  body.app-printing #printDoc{display:block!important}
   @page{margin:12mm}
-  .pd{max-width:100%!important;width:100%!important;margin:0!important}
-  .pd-bottom{position:fixed;bottom:2mm;left:0;right:0;width:auto;background:#fff}
+  body.app-printing .pd{max-width:100%!important;width:100%!important;margin:0!important}
+  body.app-printing .pd-bottom{position:fixed;bottom:2mm;left:0;right:0;width:auto;background:#fff}
 }
 .pd{color:#000;font-size:13.5pt;line-height:1.5;max-width:170mm;margin:0 auto}
 .pd-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12mm;margin-bottom:4mm}
@@ -2351,9 +2352,12 @@ function printNow(){
     w.document.close();
     return;
   }
+  // 桌機：頁內列印。只有這裡（程式列印）才加 app-printing → 只印 #printDoc；使用者自己 Cmd+P／右鍵列印不會加，印的是正常頁面。
+  var _body=document.body, _clr=function(){_body.classList.remove("app-printing");};
+  var _go=function(){ _body.classList.add("app-printing"); window.addEventListener("afterprint",_clr,{once:true}); window.print(); _clr(); };
   var _logo=document.querySelector("#printDoc img");
-  if(_logo && !_logo.complete){ _logo.onload=function(){window.print();}; _logo.onerror=function(){window.print();}; }
-  else { setTimeout(function(){window.print();},60); }
+  if(_logo && !_logo.complete){ _logo.onload=_go; _logo.onerror=_go; }
+  else { setTimeout(_go,60); }
 }
 function printContractDoc(recordId){
   const r=(SESSION.records||[]).find(x=>x.id===recordId);
@@ -2555,7 +2559,7 @@ function renderTech(){
       hourRows+=`<tr>
         <td style="color:var(--ink-soft);font-size:13px;white-space:nowrap">${esc(sub.name)}</td>
         <td>${esc(it.name)}${it.model?` <span style="color:var(--ink-soft);font-size:12px">${esc(it.model)}</span>`:""}</td>
-        <td class="num" style="white-space:nowrap"><input class="cellin" style="width:64px" type="number" min="0" step="0.5" value="${it.laborHours}" onchange="setLaborHours('${it.id}',this.value)"> 時${(Number(it.laborHours)||0)===0?' <span style="font-size:11.5px;color:#2f7d4f;font-weight:700">已含工資</span>':''}</td>
+        <td class="num" style="white-space:nowrap"><input class="cellin" style="width:64px" type="number" min="0" step="0.5" value="${it.laborHours}" onchange="setLaborHours('${it.id}',this.value)"> 時</td>
         <td class="num" style="white-space:nowrap">NT$${fmt(it.laborRate)}<span style="font-size:11.5px;color:var(--ink-soft)">/時</span></td>
         <td class="num">NT$${fmt(wage)}</td>
       </tr>`;
@@ -3010,7 +3014,7 @@ function renderAdmin(){
           <td class="num"><input class="cellin" style="width:62px" type="number" step="0.01" value="${it.coef}" onchange="setItemCoef('${it.id}',this.value)"></td>
           <td class="num">${price==null?'<span class="tbd-cell">待定</span>':'NT$'+fmt(price)}</td>
           <td class="num ${mcls}">${margin||'—'}</td>
-          <td style="min-width:148px"><div style="display:flex;gap:5px;align-items:center"><select onchange="setField('${it.id}','carType',this.value)" title="供應車型（共用／僅B型／僅C型）" style="padding:3px 4px;border:1px solid var(--line-2);border-radius:6px;font-size:12px;font-weight:700;flex:none"><option value="" ${!it.carType?'selected':''}>共用</option><option value="B" ${it.carType==='B'?'selected':''}>僅B型</option><option value="C" ${it.carType==='C'?'selected':''}>僅C型</option></select><input class="textin" style="flex:1;min-width:60px;font-size:13px" value="${(it.note||'').replace(/"/g,'&quot;')}" placeholder="備註" onchange="setField('${it.id}','note',this.value)"></div>${(Number(it.laborHours)||0)===0?'<div style="font-size:11.5px;color:#2f7d4f;font-weight:700;margin-top:3px">✓ 已含工資（自動）</div>':''}</td>
+          <td style="min-width:148px"><div style="display:flex;gap:5px;align-items:center"><select onchange="setField('${it.id}','carType',this.value)" title="供應車型（共用／僅B型／僅C型）" style="padding:3px 4px;border:1px solid var(--line-2);border-radius:6px;font-size:12px;font-weight:700;flex:none"><option value="" ${!it.carType?'selected':''}>共用</option><option value="B" ${it.carType==='B'?'selected':''}>僅B型</option><option value="C" ${it.carType==='C'?'selected':''}>僅C型</option></select><input class="textin" style="flex:1;min-width:60px;font-size:13px" value="${(it.note||'').replace(/"/g,'&quot;')}" placeholder="備註" onchange="setField('${it.id}','note',this.value)"></div></td>
           <td style="text-align:center;white-space:nowrap"><button class="delrow" title="上移" onclick="moveItem('${it.id}',-1)">▲</button><button class="delrow" title="下移" onclick="moveItem('${it.id}',1)">▼</button><button class="delrow" title="刪除" onclick="delItem('${it.id}')">🗑</button></td>
         </tr>`;
       });
