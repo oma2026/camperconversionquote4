@@ -467,6 +467,31 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 .pd-foot{margin-top:9mm;padding-top:3mm;border-top:.75pt solid #999;font-size:10.5pt;line-height:1.7;color:#222}
 .pd-foot-t{font-weight:800;margin-bottom:1mm;color:#000}
 .pd-foot-en{font-size:9pt;color:#555}
+/* 合約書 contract */
+.pc-review{font-size:10.5pt;line-height:1.7;margin:2mm 0 3mm;padding:2mm 3mm;border:.75pt solid #999}
+.pc-sec{font-weight:800;font-size:12pt;margin:3.5mm 0 1.5mm;border-left:3pt solid #000;padding-left:2mm}
+.pc-veh{display:grid;grid-template-columns:1fr 1fr;gap:1.5mm 6mm;font-size:11.5pt;border:.75pt solid #999;padding:2.5mm 3mm;page-break-inside:avoid}
+.pc-veh>div{display:flex;gap:3mm}
+.pc-veh span{color:#555;min-width:16mm;font-weight:700}
+.pc-pay th,.pc-pay td{font-size:11pt}
+.pc-payinfo{margin-top:3.5mm;font-size:10.5pt;line-height:1.95}
+.pc-payinfo-h{font-weight:800;margin-bottom:.5mm}
+.pc-opt{display:flex;align-items:center;gap:2mm}
+.pc-ck{display:inline-block;width:3.2mm;height:3.2mm;border:1pt solid #000;flex:none}
+.pc-terms-t{font-weight:800;font-size:12.5pt;margin:5mm 0 2mm;border-top:1.5pt solid #000;padding-top:2.5mm;page-break-after:avoid}
+.pc-terms{margin:0;padding-left:6mm;font-size:9.8pt;line-height:1.7}
+.pc-terms li{margin-bottom:1.5mm;text-align:justify}
+.pc-declare{margin-top:3mm;font-size:10pt;line-height:1.7;font-weight:700}
+.pc-parties-t{font-weight:800;font-size:12.5pt;margin:5mm 0 2mm;page-break-after:avoid}
+.pc-parties{display:flex;gap:8mm}
+.pc-party{flex:1;border:.75pt solid #000;padding:3mm;page-break-inside:avoid}
+.pc-ph{font-weight:800;font-size:11.5pt;margin-bottom:2mm;text-align:center;background:#ececec;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:1mm}
+.pc-pr{display:flex;gap:2mm;font-size:10.5pt;padding:1.4mm 0;border-bottom:.5pt dotted #bbb}
+.pc-pr span{color:#555;min-width:24mm;font-weight:700}
+.pc-pr i{flex:1;font-style:normal}
+.pc-sign i{min-height:7mm}
+.pc-signrow{display:flex;justify-content:space-between;gap:16mm;margin-top:8mm;font-size:11pt}
+.pc-cno{margin-top:4mm;font-size:9pt;color:#666;text-align:right}
 
 /* customer mode */
 .custbtn{border:1px solid var(--line-2);background:var(--card);color:var(--ink);font-weight:800;font-size:14px;padding:8px 13px;border-radius:999px;cursor:pointer;white-space:nowrap}
@@ -559,7 +584,7 @@ body.custmode .cust-exit{display:inline-flex!important}
     </div>
     <div class="cust">
       <div class="field full nofill biz-cust-field"><label>客戶名稱</label><input id="cName" placeholder="王先生"></div>
-      <div class="field nofill biz-cust-field"><label>車型</label><select id="cCar"><option value="">請選擇車型</option></select></div>
+      <div class="field nofill biz-cust-field"><label>車型</label><select id="cCar" onchange="onBizCarChange()"><option value="">請選擇車型</option></select></div>
       <div class="field nofill biz-cust-field"><label>業務員</label><div class="rep-readout" id="cRepShow">—</div></div>
       <div class="field full nofill biz-cust-field"><label>車身碼</label><input id="cVin" placeholder="車輛車身碼（VIN）"></div>
       <div class="field full nofill"><label>其他需求</label><textarea id="cOther" rows="2" placeholder="清單沒有、想加裝的寫這裡"></textarea></div>
@@ -825,6 +850,16 @@ const SESS_KEY="oma_session_v1";
 const SALES_SEED=["業務共用","Peter","CBC","Allen","Gary"];
 let SALES=SALES_SEED.slice();   // 執行期會由 DB.sales 重建（可在管理後台增刪業務）
 const CARS=["Sunlight Cliff 540","Sunlight Cliff 600","Sunlight Cliff T58","Sunlight Cliff T66S","Sunlight Cliff T67S","Burstner Habiton X","Burstner Habiton Signature"];
+/* 車型限定品項：品項只有「車型名稱包含清單任一關鍵字」（不分大小寫）的車可選；未列出的品項＝所有車型都可選。
+   em3＝電動下拉床，只有 Sunlight Cliff T 系列（T58／T66S／T67S）與 Burstner Habiton Signature 可選。 */
+const CAR_ONLY_ITEMS={ em3:["Cliff T","Signature"] };
+function carAllowsItem(itemId,carName){
+  const toks=CAR_ONLY_ITEMS[itemId];
+  if(!toks||!toks.length)return true;                 // 未限定 → 所有車型都可
+  const c=String(carName||"").toLowerCase();
+  if(!c)return false;                                  // 有限定但尚未選車 → 先不顯示，避免加到不適用車型
+  return toks.some(t=>c.includes(String(t).toLowerCase()));
+}
 const COMPANY={
   nameZh:"歐馬企業股份有限公司",
   nameEn:"O-MA GROUP CO., LTD.",
@@ -847,6 +882,23 @@ const QUOTE_NOTES=[
   "實際施工項目及金額，以雙方確認簽認後為準。",
   "前款付款後始安排施工，尾款於交車前結清。",
   "改裝項目保固依原廠或本公司規定辦理，人為損壞不在保固範圍。"
+];
+/* 合約書用：賣方統一編號、負責人、匯款帳戶。請填入實際資料（留空會在合約上印底線供手填）。 */
+const OMA_SELLER={ taxId:"", owner:"", bankName:"", bankAcctName:"歐馬企業股份有限公司", bankAcctNo:"" };
+/* 合約書條款範本（每條一項，依序印在合約上，可自行增修）。建議先經貴公司法務／顧問確認再對外使用。 */
+const CONTRACT_TERMS=[
+  "【契約標的與客製化】買受人確認本契約標的為依買受人需求所為之車輛改裝／客製化給付，內容包括但不限於車型、改裝項目、電動設備、影音安全、木作內裝、外觀配件、特殊訂製配備或其他買受人指定事項；上列改裝內容及規格已經買受人確認無誤。",
+  "【價金範圍】本契約所載價金除另有約定外，包含改裝材料、施工、安裝及應由出賣人負擔之相關費用；但不包含車輛本體（買受人自備車輛時）、申領牌照之監理規費與手續費、車輛保險費、驗車或車輛變更登記等應由買受人負擔之費用。",
+  "【客製化商品不適用七日解除權】本契約標的屬「依消費者要求所為之客製化給付」，如係透過網路、電話、LINE、Email 或其他通訊方式成立，出賣人已於簽約前明確告知買受人依消費者保護法第19條第1項但書，不適用通訊交易七日解除權。",
+  "【訂金與施工款】買受人於簽約時支付訂金，作為出賣人採購改裝材料、預留施工排程及履約準備之款項。出賣人已依買受人需求採購材料或開始施工後，買受人不得任意取消訂單或請求無條件退還訂金／已付款項；若雙方協議取消，買受人應負擔已發生之實際成本（含材料、進口、施工及其他必要支出）。",
+  "【施工期間與交車】實際完工及交車日期以改裝進度、材料到貨及車測（如需）為準，如遇不可抗力得順延，出賣人應即時通知買受人。買受人應於出賣人通知交車後所定期限內完成驗收並付清尾款，出賣人始負交車義務。",
+  "【驗收與風險移轉】買受人取車前應檢視改裝項目及車輛有無瑕疵或短缺，並簽署交車確認書以完成交車手續。標的車輛自完成交車手續、駛離出賣人營業所在地時起，其毀損、滅失之風險即移轉由買受人負擔。",
+  "【保固】改裝項目之保固範圍與期限，依本公司及各設備原廠之保固條款辦理；因買受人自行改動、不當使用、外力或天災所致之損壞，不在保固範圍內。",
+  "【規格變更】訂單確認後，買受人要求變更改裝項目或規格者，須經出賣人同意，所生費用由買受人負擔，並可能影響交期。",
+  "【價格調整】如遇匯率、關稅、原廠或供應商售價、政府規費之重大變動，雙方得本誠信原則協商調整；未能合意者，就尚未施工／交付之部分得解除契約，並返還已收之相應價款。",
+  "【個人資料】買受人同意出賣人於履行本契約之必要範圍內，蒐集、處理及利用買受人之姓名、聯絡方式、車輛及付款資料，使用目的包含改裝施工、採購、開立發票、保固登錄、維修及售後服務；出賣人不得於前述目的外任意使用或提供予無關第三人。",
+  "【買受人違約】買受人未依約付款或受領交車者，出賣人得定相當期限催告；逾期仍不履行者，出賣人得解除契約並就已發生之成本及損害請求賠償，必要時得沒收訂金充作違約金。",
+  "【準據法與管轄】本合約適用中華民國法律，涉訟時雙方合意以臺灣臺中地方法院為第一審管轄法院。本合約一式二份，雙方各執一份為憑。"
 ];
 let DB=null, activeCat=null, quote={}, unlocked=false, buyerUnlocked=false, acctUnlocked=false, techUnlocked=false, cashierUnlocked=false, dealModalOpen=false, curMode="biz";
 let acctFilter={y:"",m:""}, cashierFilter={y:"",m:""};
@@ -1051,6 +1103,7 @@ function renderDealsList(){
           <div style="font-size:13.5px;margin-bottom:8px">訂金（${depositPctVal()}%）：<b style="color:var(--rust)">NT$${fmt(depositAmt(base))}</b>　·　尾款：<b>NT$${fmt(balanceAmt(base))}</b></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
             <button class="abtn" style="${r.depositPaid?'background:#2f7d4f;color:#fff;border-color:#2f7d4f':''}" onclick="toggleDepositPaid('${r.id}')">${r.depositPaid?'✓ 訂金已付':'訂金未付'}</button>
+            <button class="abtn" onclick="printContractDoc('${r.id}')" style="border-color:#111;font-weight:800">📄 列印合約書</button>
             ${ci.has
               ? `<button class="abtn" onclick="viewContract('${r.id}')">📄 看合約</button><button class="abtn warn" onclick="removeContract('${r.id}')">移除合約</button>`
               : `<label class="abtn" style="cursor:pointer;margin:0">⬆ 上傳合約<input type="file" accept="image/*,application/pdf" style="display:none" onchange="onContractPick('${r.id}',this)"></label>`}
@@ -1802,7 +1855,7 @@ function importCustomerCode(codeRaw){
 }
 function customerData(){
   return {
-    pin:((DB.sales&&DB.sales.custBase)||CUSTOMER_PIN), logo:LOGO_SVG, title:COMPANY.nameZh, cars:visibleCars(), totalRound:(DB.totalRound||{method:"none",to:1}), depositPct:depositPctVal(), excl:[acIds()].concat(EXCL_GROUPS), reqWire:{ac:acIds(),ws:reqAcIds()},
+    pin:((DB.sales&&DB.sales.custBase)||CUSTOMER_PIN), logo:LOGO_SVG, title:COMPANY.nameZh, cars:visibleCars(), totalRound:(DB.totalRound||{method:"none",to:1}), depositPct:depositPctVal(), excl:[acIds()].concat(EXCL_GROUPS), reqWire:{ac:acIds(),ws:reqAcIds()}, carOnly:CAR_ONLY_ITEMS,
     reps:(DB.sales&&DB.sales.list||[]).map(r=>{return {k:r.key,l:(r.zh?r.zh+" ":"")+r.key,code:repCustCode(r)};}),
     cats:DB.categories.map(c=>({
       name:c.name,
@@ -1891,6 +1944,7 @@ function tryPin(){var nm=(document.getElementById("cname").value||"").trim();var
 function renderReps(){var h="";D.reps.forEach(function(r){h+='<button class="rp '+(chosenRep==r.k?"on":"")+'" data-rep="'+r.k+'">'+r.l+'</button>';});document.getElementById("reps").innerHTML=h;}
 function setCat(c){active=c;renderCat();}
 function exclOf(id){var gs=D.excl||[];for(var i=0;i<gs.length;i++){if(gs[i].indexOf(id)>=0)return gs[i];}return null;}
+function carAllows(id){var m=D.carOnly&&D.carOnly[id];if(!m||!m.length)return true;var c=String(custCar||"").toLowerCase();if(!c)return false;for(var i=0;i<m.length;i++){if(c.indexOf(String(m[i]).toLowerCase())>=0)return true;}return false;}
 function isReqAc(id){return !!(D.reqWire&&D.reqWire.ws&&D.reqWire.ws.indexOf(id)>=0);}
 function acSelected(){return !!(D.reqWire&&D.reqWire.ac&&D.reqWire.ac.some(function(a){return cart[a];}));}
 function tog(id){
@@ -1898,6 +1952,7 @@ function tog(id){
     if(isReqAc(id)&&acSelected()){alert("已選冷氣，此為必附標配，不可單獨移除");return;}
     delete cart[id];
   }else{
+    if(!carAllows(id)){alert("此品項僅適用特定車型，您目前選擇的車型不可選購");return;}
     var g=exclOf(id);if(g){g.forEach(function(o){if(o!==id)delete cart[o];});}
     cart[id]=1;
     if(D.reqWire&&D.reqWire.ac&&D.reqWire.ac.indexOf(id)>=0&&D.reqWire.ws){D.reqWire.ws.forEach(function(w){if(w)cart[w]=cart[w]||1;});}
@@ -1915,7 +1970,7 @@ var html="";
 D.cats.forEach(function(c){
 if(active!="__all"&&active!=c.name){return;}
 c.subs.forEach(function(s){
-var items=s.items.filter(function(it){if(!kw){return true;}return (it.name+" "+it.model).toLowerCase().indexOf(kw)>=0;});
+var items=s.items.filter(function(it){if(!carAllows(it.id)){return false;}if(!kw){return true;}return (it.name+" "+it.model).toLowerCase().indexOf(kw)>=0;});
 if(!items.length){return;}
 html+='<div class="sub">'+(active=="__all"?c.name+' · ':'')+s.name+(s.name==="冷氣本體"?' <span class="subnote">選任一冷氣會自動附標配（整車配線、庫倫錶／遙控器、充電器）</span>':'')+'</div><div class="grid">';
 items.forEach(function(it){
@@ -2008,10 +2063,12 @@ function renderCatalog(){
   const q=(document.getElementById("searchIn").value||"").trim().toLowerCase();
   const body=document.getElementById("catBody");body.innerHTML="";
   const cats=activeCat==="__all"?DB.categories:DB.categories.filter(c=>c.id===activeCat);
+  const bizCar=(document.getElementById("cCar")||{}).value||"";
   let shown=0;
   cats.forEach(cat=>{
     cat.subs.forEach(sub=>{
       const matches=sub.items.filter(it=>{
+        if(!carAllowsItem(it.id,bizCar))return false;   // 車型限定品項
         if(!q)return true;
         return (it.name+" "+(it.model||"")+" "+cat.name+" "+sub.name).toLowerCase().includes(q);
       });
@@ -2056,9 +2113,18 @@ function itemIdByName(name){for(const c of DB.categories)for(const s of c.subs)f
 // 選任一冷氣時，自動附上的「冷氣標配」品項（依名稱找，找不到就略過）
 const AC_REQUIRED_NAMES=["整車配線","庫倫錶／遙控器","充電器"];
 function reqAcIds(){return AC_REQUIRED_NAMES.map(itemIdByName).filter(Boolean);}
+function onBizCarChange(){ pruneCarItems(); renderCatalog(); renderQuote(); }   // 換車型：移除不適用的限定品項並重繪
+function pruneCarItems(){
+  const car=(document.getElementById("cCar")||{}).value||"";
+  let removed=0;
+  Object.keys(quote).forEach(id=>{ if(!carAllowsItem(id,car)){delete quote[id];removed++;} });
+  if(removed){saveSession();toast("已移除不適用目前車型的限定品項");}
+}
 function addToQuote(id){
   if(quote[id]){renderCatalog();renderQuote();return;}
   const f=findItem(id);if(!f)return;
+  const bizCar=(document.getElementById("cCar")||{}).value||"";
+  if(!carAllowsItem(id,bizCar)){toast("此品項僅限特定車型（T 系列 / Signature），請先在上方「車型」選擇對應車型");return;}
   const g=exclGroupOf(id);
   if(g){g.forEach(o=>{if(o!==id&&quote[o])delete quote[o];});}   // 同組單選：移除其他選項
   quote[id]={qty:1,manual:retail(f.item)==null?"":null};
@@ -2257,6 +2323,99 @@ function renderPrintDoc(o){
         <ol class="pd-notes-ol">${QUOTE_NOTES.map(n=>`<li>${esc(n)}</li>`).join("")}</ol>
       </div>
       </div>
+    </div>`;
+  const _logo=document.querySelector("#printDoc img");
+  if(_logo && !_logo.complete){ _logo.onload=()=>window.print(); _logo.onerror=()=>window.print(); }
+  else { setTimeout(()=>window.print(),60); }
+}
+function printContractDoc(recordId){
+  const r=(SESSION.records||[]).find(x=>x.id===recordId);
+  if(!r){toast("找不到這筆紀錄");return;}
+  const listTotal=Number(r.total)||0;
+  const total=(r.deal!=null&&r.deal>0)?Number(r.deal):listTotal;   // 合約總價＝成交價（未填則帶報價金額）
+  const dealDiscount=Math.max(0,listTotal-total);                  // 議價折讓
+  const nt=n=>"NT$ "+fmt(Math.round(Number(n)||0));
+  const U="＿＿＿＿＿＿";
+  const rpf=REPS[r.rep]||{};
+  const repName=`${rpf.title?rpf.title+" ":""}${rpf.zh?rpf.zh+" ":""}${r.rep==="業務共用"?"業務共用":`（${r.rep}）`}`;
+  const now=new Date();const p2=n=>String(n).padStart(2,"0");
+  const cno="C"+now.getFullYear()+p2(now.getMonth()+1)+p2(now.getDate())+p2(now.getHours())+p2(now.getMinutes());
+  const today=`${now.getFullYear()} 年 ${p2(now.getMonth()+1)} 月 ${p2(now.getDate())} 日`;
+  const dep=depositAmt(total)||0, bal=balanceAmt(total)||0;
+  let idx=0,anyTBD=false;
+  const rows=(r.items||[]).map(it=>{
+    idx++; if(it.unit==null)anyTBD=true;
+    const amt=(it.lineTotal==null)?"報價另計":nt(it.lineTotal);
+    return `<tr><td class="c">${idx}</td><td>${esc(it.name)}${it.model?`　<span class="pd-md">${esc(it.model)}</span>`:""}</td><td class="c">${it.qty}</td><td class="r">${amt}</td></tr>`;
+  }).join("");
+  document.getElementById("printDoc").innerHTML=`
+    <div class="pd pc">
+      <div class="pd-header">
+        <div class="pd-brandcol">
+          <div class="pd-logo-wrap">${LOGO_SVG}</div>
+          <div class="pd-legal">${COMPANY.nameZh}（${COMPANY.nameEn}）</div>
+        </div>
+        <div class="pd-contact-top">
+          <div><b>電　話：</b>${COMPANY.phone}</div>
+          <div><b>傳　真：</b>${COMPANY.fax}</div>
+          <div><b>地　址：</b>${COMPANY.addrZh}</div>
+        </div>
+      </div>
+      <div class="pd-title" style="letter-spacing:.4em">訂　購　合　約　書</div>
+      <div class="pd-hr"></div>
+      <div class="pc-review">【契約審閱權】本契約於中華民國 ______ 年 ____ 月 ____ 日提供買受人攜回審閱（審閱期間至少三日）。買受人確認已充分閱讀並了解本契約及附件內容。　□ 已審閱三日以上　□ 買受人自願於審閱期間內簽署，並確認已充分理解契約內容。</div>
+      <div class="pc-sec">買賣標的</div>
+      <div class="pc-veh">
+        <div><span>買方</span>${esc(r.cust.name&&r.cust.name!=="—"?r.cust.name:U)}</div><div><span>訂購日期</span>${today}</div>
+        <div><span>車型</span>${esc(r.cust.car&&r.cust.car!=="—"?r.cust.car:U)}</div><div><span>車身號碼</span>${esc(r.cust.vin||"客製化改裝（待施工）")}</div>
+      </div>
+      <table class="pd-table" style="margin-top:3mm">
+        <thead><tr><th class="c" style="width:10%">序號</th><th style="width:56%">訂購標的（改裝項目 / 配備）</th><th class="c" style="width:14%">數量</th><th class="r" style="width:20%">金額</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div class="pd-totals">
+        ${anyTBD?`<div class="pd-trow"><span>※ 含「報價另計」品項，其金額另行確認</span></div>`:""}
+        ${dealDiscount>0?`<div class="pd-trow"><span>配備小計</span><span>${nt(listTotal)}</span></div><div class="pd-trow"><span>議價折讓</span><span>−${nt(dealDiscount)}</span></div>`:""}
+        <div class="pd-trow pd-grand"><span>${dealDiscount>0?"成交總價（含稅）":"價金總額（含稅）"}</span><span>${nt(total)}</span></div>
+      </div>
+      <table class="pd-table pc-pay" style="margin-top:4mm">
+        <thead><tr><th style="width:46%">付款條件</th><th class="r" style="width:27%">費用</th><th class="c" style="width:27%">支付時間</th></tr></thead>
+        <tbody>
+          <tr><td>訂金（成交價 ${depositPctVal()}%）</td><td class="r">${nt(dep)}</td><td class="c">合約簽訂日</td></tr>
+          <tr><td>尾款</td><td class="r">${nt(bal)}</td><td class="c">交車</td></tr>
+        </tbody>
+      </table>
+      <div class="pc-payinfo">
+        <div class="pc-payinfo-h">付款方式（請勾選一種）</div>
+        <div class="pc-opt"><span class="pc-ck"></span>現金</div>
+        <div class="pc-opt"><span class="pc-ck"></span>銀行匯款：${OMA_SELLER.bankName||U}／戶名：${OMA_SELLER.bankAcctName||COMPANY.nameZh}／帳號：${OMA_SELLER.bankAcctNo||U}</div>
+        <div class="pc-opt"><span class="pc-ck"></span>即期支票：抬頭「${OMA_SELLER.bankAcctName||COMPANY.nameZh}」，劃平行線並註明禁止背書轉讓</div>
+      </div>
+      <div class="pc-terms-t">契約條款</div>
+      <ol class="pc-terms">${CONTRACT_TERMS.map(t=>`<li>${t}</li>`).join("")}</ol>
+      <div class="pc-declare">買受人確認已詳閱並同意上列全部條款，特別是「客製化商品不適用七日解除權」及「訂金與已發生成本負擔」之約定。</div>
+      <div class="pc-parties-t">立合約人</div>
+      <div class="pc-parties">
+        <div class="pc-party">
+          <div class="pc-ph">甲方（賣方）</div>
+          <div class="pc-pr"><span>公司名</span><i>${COMPANY.nameZh}</i></div>
+          <div class="pc-pr"><span>統一編號</span><i>${OMA_SELLER.taxId||U}</i></div>
+          <div class="pc-pr"><span>負責人</span><i>${OMA_SELLER.owner||U}</i></div>
+          <div class="pc-pr"><span>電話</span><i>${COMPANY.phone}</i></div>
+          <div class="pc-pr"><span>地址</span><i>${COMPANY.addrZh}</i></div>
+          <div class="pc-pr pc-sign"><span>業務代表</span><i>${repName}</i></div>
+        </div>
+        <div class="pc-party">
+          <div class="pc-ph">乙方（買方）</div>
+          <div class="pc-pr pc-sign"><span>公司／個人姓名</span><i>${esc(r.cust.name&&r.cust.name!=="—"?r.cust.name:"")}</i></div>
+          <div class="pc-pr"><span>身分證字號／統編</span><i></i></div>
+          <div class="pc-pr"><span>電話</span><i></i></div>
+          <div class="pc-pr"><span>地址</span><i></i></div>
+          <div class="pc-pr"><span>E-MAIL</span><i></i></div>
+        </div>
+      </div>
+      <div class="pc-signrow"><div>買方簽名 / 蓋章　日期：__________</div><div>賣方（蓋章）　日期：__________</div></div>
+      <div class="pc-cno">合約編號：${cno}</div>
     </div>`;
   const _logo=document.querySelector("#printDoc img");
   if(_logo && !_logo.complete){ _logo.onload=()=>window.print(); _logo.onerror=()=>window.print(); }
