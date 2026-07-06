@@ -866,7 +866,7 @@ function carAllowsItem(itemId,carName){
 function setCarType(name,type){
   if(!DB.carTypes||typeof DB.carTypes!=="object")DB.carTypes={};
   DB.carTypes[name]=(type==="C")?"C":"B";
-  saveDB();renderCatalog();renderQuote();if(unlocked)renderCarMgr();
+  saveDB();renderCatalog();renderQuote();if(unlocked)renderCarMgr();if(buyerUnlocked)renderBuyer();
 }
 const COMPANY={
   nameZh:"歐馬企業股份有限公司",
@@ -2496,10 +2496,11 @@ function renderCashier(){
       <td>${esc(r.cust.name)}${r.cust.car&&r.cust.car!=="—"?`・${esc(r.cust.car)}`:""}${r.cust.vin?`<br><span style="color:var(--ink-soft);font-size:12px">車身碼 ${esc(r.cust.vin)}</span>`:""}</td>
       <td class="num">NT$${fmt(rv)}</td>
       <td class="num">NT$${fmt(r.totalCost)}</td>
+      <td style="text-align:center;white-space:nowrap"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:3px">NT$${fmt(depositAmt(rv))}</div><button class="abtn" style="${r.depositPaid?'background:#2f7d4f;color:#fff;border-color:#2f7d4f':''}" onclick="toggleDepositPaid('${r.id}')">${r.depositPaid?'✓ 訂金已收':'訂金未收'}</button></td>
       <td style="text-align:center"><button class="abtn" style="${r.paid?'background:#2f7d4f;color:#fff;border-color:#2f7d4f':''}" onclick="toggleCashier('${r.id}')">${r.paid?'已收款':'未收款'}</button></td>
       <td style="text-align:center"><div style="display:flex;flex-direction:column;gap:4px"><button class="abtn rec-print" onclick="reprintRecord('${r.id}')">📄 報價單</button><button class="abtn rec-print" onclick="printContractDoc('${r.id}')">📄 合約書</button></div></td>
     </tr>`;
-  }).join(""):`<tr><td colspan="7" style="color:var(--ink-soft)">${cashierPayFilter!=="all"?(cashierPayFilter==="paid"?"目前沒有「已收款」的訂單。":"目前沒有「未收款」的訂單，全部收齊了！"):((cashierFilter.y||cashierFilter.m)?"這個期間沒有已成交的訂單。":"還沒有已成交的訂單。")}</td></tr>`;
+  }).join(""):`<tr><td colspan="8" style="color:var(--ink-soft)">${cashierPayFilter!=="all"?(cashierPayFilter==="paid"?"目前沒有「已收款」的訂單。":"目前沒有「未收款」的訂單，全部收齊了！"):((cashierFilter.y||cashierFilter.m)?"這個期間沒有已成交的訂單。":"還沒有已成交的訂單。")}</td></tr>`;
   p.innerHTML=`
     <div style="text-align:right;margin-bottom:8px"><button class="abtn" onclick="changeRolePin('cashier')">變更出納密碼</button></div>
     <h3 class="admin-sec">出納總覽（已成交）</h3>
@@ -2518,8 +2519,8 @@ function renderCashier(){
       <div class="acct-card"><div class="ac-lbl">未收</div><div class="ac-val" style="color:#b23b2e">NT$${fmt(recvDue)}</div></div>
       <div class="acct-card"><div class="ac-lbl">應付供應商</div><div class="ac-val">NT$${fmt(payAll)}</div></div>
     </div>
-    <p style="font-size:13px;color:var(--ink-soft);margin:12px 0 4px">應收以「成交價」為準（未填則以報價）。按「未收款／已收款」切換收款狀態。</p>
-    <table class="rec-table"><thead><tr><th>日期</th><th>業務</th><th>客戶</th><th class="num">應收</th><th class="num">應付</th><th style="text-align:center">收款</th><th style="text-align:center">列印</th></tr></thead>
+    <p style="font-size:13px;color:var(--ink-soft);margin:12px 0 4px">應收以「成交價」為準（未填則以報價）。「訂金」欄顯示應收訂金金額，點一下可切換「訂金已收／未收」；「收款」欄切換全額收款狀態。兩者都會同步到業務端與管理後台。</p>
+    <table class="rec-table"><thead><tr><th>日期</th><th>業務</th><th>客戶</th><th class="num">應收</th><th class="num">應付</th><th style="text-align:center">訂金</th><th style="text-align:center">收款</th><th style="text-align:center">列印</th></tr></thead>
     <tbody>${rows}</tbody></table>`;
 }
 function renderTech(){
@@ -2753,11 +2754,14 @@ function renderBuyer(){
     <h3 class="admin-sec" style="margin-top:24px">各筆訂單採購明細</h3>
     <div class="rec-list">${recs}</div>
     <h3 class="admin-sec" style="margin-top:28px">產品管理</h3>
-    <p style="font-size:14px;color:var(--ink-soft);margin:2px 0 10px">新增／編輯品項、名稱／型號、<b>成本</b>、照片，也可改<b>大／小分類名稱</b>與<b>供應車型（共用／僅B型／僅C型）</b>，都會即時同步到業務端、客戶選配單與管理後台。<br>（車輛本身的 B型／C型 分類在「管理後台 → 車型管理」設定。）</p>
+    <p style="font-size:14px;color:var(--ink-soft);margin:2px 0 10px">新增／編輯品項、名稱／型號、<b>成本</b>、照片，也可改<b>大／小分類名稱</b>與<b>供應車型（共用／僅B型／僅C型）</b>，都會即時同步到業務端、客戶選配單與管理後台。<br>（每台車是 B型／C型，可在下方「車型分類」設定。）</p>
     <div class="tablewrap"><table>
       <thead><tr><th>小分類</th><th>品項名稱</th><th>型號</th><th class="num">成本</th><th style="text-align:center">供應車型</th><th style="text-align:center">照片</th><th></th></tr></thead>
       <tbody>${prodRows}</tbody>
-    </table></div>`;
+    </table></div>
+    <h3 class="admin-sec" style="margin-top:24px">車型分類（B型 / C型）</h3>
+    <p style="font-size:14px;color:var(--ink-soft);margin:2px 0 10px">設定每台車是 <b>B型</b> 或 <b>C型</b>。搭配上方品項的「供應車型」，就能讓某些配備只給 B 型或 C 型車。（新增／隱藏車型仍在「管理後台 → 車型管理」。）</p>
+    <div style="display:flex;flex-wrap:wrap;gap:10px">${visibleCars().map(nm=>{const ct=carTypeOf(nm);return `<span style="display:inline-flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line-2);border-radius:999px;padding:6px 8px 6px 14px;font-size:14px;font-weight:700">${esc(nm)}<select onchange="setCarType('${nm.replace(/'/g,"\\'")}',this.value)" style="border:1px solid var(--line-2);border-radius:6px;padding:2px 4px;font-size:12px;font-weight:700;background:var(--card)"><option value="B" ${ct==='B'?'selected':''}>B型</option><option value="C" ${ct==='C'?'selected':''}>C型</option></select></span>`;}).join("")}</div>`;
 }
 function printPurchase(id){
   const r=(SESSION.records||[]).find(x=>x.id===id);if(!r)return;
