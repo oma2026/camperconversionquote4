@@ -2051,7 +2051,7 @@ function renderCatalog(){
 }
 
 /* ---------- quote ---------- */
-const EXCL_GROUPS=[["pw1","pw2","pw3","pw4"]];   // 電池四選一（冷氣改用動態群組）
+const EXCL_GROUPS=[["pw1","pw2","pw3","pw4"],["em1","em2"]];   // 電池四選一、電動升降桌腳二選一（em1／em2）（冷氣改用動態群組）
 function acIds(){for(const c of DB.categories)for(const s of c.subs)if(s.name==="冷氣本體")return s.items.map(it=>it.id);return [];}
 function exclGroupOf(id){const ac=acIds();if(ac.includes(id))return ac;for(const g of EXCL_GROUPS)if(g.includes(id))return g;return null;}
 function itemIdByName(name){for(const c of DB.categories)for(const s of c.subs)for(const it of s.items)if(it.name===name)return it.id;return null;}
