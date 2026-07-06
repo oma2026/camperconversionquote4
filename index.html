@@ -1924,7 +1924,6 @@ html+='<div class="card">';
 if(it.photo){html+='<div class="ph"><img src="'+it.photo+'"></div>';}
 if(it.model){html+='<span class="mdl">'+it.model+'</span>';}
 html+='<div class="nm">'+it.name+'</div>';
-if(it.incl){html+='<div class="incl">✓ 已含工資</div>';}
 html+='<div class="ft"><div class="pr">'+(it.price==null?'<span class="tbd">價格待定</span>':'<span class="cur">NT$</span>'+fmt(it.price))+'</div>';
 html+='<button class="add '+(on?"on":"")+'" data-tog="'+it.id+'" title="'+(on?"已選，點一下移除":"加入")+'">'+(on?"✓":"＋")+'</button></div></div>';
 });
@@ -2031,7 +2030,6 @@ function renderCatalog(){
           ${it.photo?`<div class="item-photo"><img src="${it.photo}" alt=""></div>`:""}
           ${it.model?`<span class="model">${it.model}</span>`:""}
           <div class="name">${it.name}</div>
-          ${(Number(it.laborHours)||0)===0?`<div class="incl">✓ 已含工資</div>`:""}
           <div class="foot">
             <div class="price">
               <div class="plabel">零售價</div>
@@ -2817,10 +2815,10 @@ function renderAdmin(){
           <td><input class="textin" style="min-width:90px" value="${(it.model||'').replace(/"/g,'&quot;')}" onchange="setField('${it.id}','model',this.value)"></td>
           <td class="num" style="color:var(--rust);font-weight:700">${it.cost==null?'<span style="color:var(--ink-soft);font-weight:400">待採購填</span>':fmt(it.cost)}</td>
           <td class="num"><div style="display:flex;align-items:center;justify-content:flex-end;gap:3px">
-              <span style="min-width:30px;text-align:right;font-weight:700">${it.laborHours}</span><span style="font-size:12.5px;color:var(--ink-soft)">時 ×</span>
+              <input class="cellin" style="width:52px" type="number" min="0" step="0.5" value="${it.laborHours}" onchange="setLaborHours('${it.id}',this.value)"><span style="font-size:12.5px;color:var(--ink-soft)">時 ×</span>
               <input class="cellin" style="width:58px" type="number" min="0" step="50" value="${it.laborRate}" onchange="setItemRate('${it.id}',this.value)"><span style="font-size:12.5px;color:var(--ink-soft)">/時</span>
             </div>
-            <div style="font-size:11px;color:var(--ink-soft);margin-top:3px">工時由技術部設定 ・ = NT$${fmt(Math.round((it.laborHours||0)*(it.laborRate||0)))}</div></td>
+            <div style="font-size:11px;color:var(--ink-soft);margin-top:3px">工時 × 費率 ＝ NT$${fmt(Math.round((it.laborHours||0)*(it.laborRate||0)))}（管理後台與技術部皆可改）</div></td>
           <td class="num"><input class="cellin" style="width:62px" type="number" step="0.01" value="${it.coef}" onchange="setItemCoef('${it.id}',this.value)"></td>
           <td class="num">${price==null?'<span class="tbd-cell">待定</span>':'NT$'+fmt(price)}</td>
           <td class="num ${mcls}">${margin||'—'}</td>
