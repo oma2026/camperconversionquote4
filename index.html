@@ -612,8 +612,7 @@ body.custmode .cust-exit{display:inline-flex!important}
     <h2 style="font-size:23px;margin:6px 0 4px">歐馬企業 · 改裝報價系統</h2>
     <p style="color:var(--ink-soft);font-size:14px;margin-bottom:22px">請問您是？</p>
     <div style="display:flex;flex-direction:column;gap:12px">
-      <button class="pbtn" style="font-size:17px;padding:16px" onclick="pickEmployee()">👤 歐馬企業員工</button>
-      <button class="pbtn" style="font-size:17px;padding:16px;background:#b1802a;color:#fff" onclick="pickCustomer()">⭐ VIP</button>
+      <button class="pbtn" style="font-size:17px;padding:16px;background:#b1802a;color:#fff" onclick="pickEmployee()">👤 歐馬企業員工登入</button>
     </div>
   </div>
 </div>
@@ -1613,7 +1612,8 @@ function startCustomer(){
   const err=document.getElementById("ciErr");
   if(!nm){err.textContent="請輸入您的稱呼";return;}
   if(!car){err.textContent="請選擇您選購的車型";return;}
-  const rep=repByCustCode(pin);
+  let rep=repByCustCode(pin);
+  if(!rep && window._handoff && window._handoff.pin===String(pin||"").trim().toLowerCase()) rep=window._handoff.rep;   // 雲端未載入時，用入口頁已驗證的業務
   if(!rep){err.textContent="密碼錯誤，請向業務確認";return;}
   document.getElementById("custInfoModal").style.display="none";
   custInfo={name:nm,car:car,rep:rep};
@@ -1631,6 +1631,27 @@ function startCustomer(){
   const rs=document.getElementById("cRepShow");if(rs){const rp=REPS[rep]||{};rs.textContent=(rp.zh?rp.zh+" ":"")+rep;}
   renderCatalog();renderQuote();
   toggleQuote(false);window.scrollTo(0,0);
+}
+/* ===== VIP 入口頁帶入：自動帶入客戶登入（同網域用 sessionStorage，姓名/密碼不經網址）===== */
+var VIP_HANDOFF_KEY="oma_vip_handoff";
+function readVipHandoff(){
+  try{
+    var raw=sessionStorage.getItem(VIP_HANDOFF_KEY); if(!raw)return null;
+    var h=JSON.parse(raw); if(!h||h.sys!=="camper")return null;
+    if(h.ts&&(Date.now()-h.ts>86400000))return null;   // 逾 24 小時作廢
+    return h;
+  }catch(e){return null;}
+}
+function openCustomerFromHandoff(h){
+  try{
+    var g=document.getElementById("entryGate"); if(g)g.style.display="none";
+    pickCustomer();   // 開客戶資料視窗 + 帶入可選車型
+    window._handoff={pin:(h.pass||"").trim().toLowerCase(), rep:h.rep||null};
+    var nm=document.getElementById("ciName"); if(nm)nm.value=(h.name||"").trim();
+    var pin=document.getElementById("ciPin"); if(pin)pin.value=(h.pass||"").trim();
+    var err=document.getElementById("ciErr"); if(err)err.textContent="請選擇您選購的車型後開始";
+    var car=document.getElementById("ciCar"); if(car&&car.focus)setTimeout(function(){car.focus();},80);
+  }catch(e){}
 }
 function submitCustomer(){
   const ids=Object.keys(quote);
@@ -3460,6 +3481,7 @@ function initFirestore(){
         saveDBLocal();
         ensureSessionSlots();
         try{populateCarSelect();renderReps();populateLoginSel();renderCatalog();renderQuote();}catch(_){}
+        try{ var _cim=document.getElementById("custInfoModal"); var _cc=document.getElementById("ciCar"); if(_cim&&_cim.style.display!=="none"&&_cc&&typeof visibleCars==="function"){ var _k=_cc.value; _cc.innerHTML='<option value="">請選擇車型</option>'+visibleCars().map(function(c){return '<option>'+esc(c)+'</option>';}).join(""); _cc.value=_k; } }catch(_){}   // VIP 入口帶入：雲端載入後刷新可選車型
         if(unlocked&&curMode==="admin")renderAdmin();
         else if(buyerUnlocked&&curMode==="buyer")renderBuyer();
         else if(techUnlocked&&curMode==="tech")renderTech();
@@ -3566,6 +3588,7 @@ renderQuote();
 (function(){const dp=document.getElementById("dealPrice");if(dp){const save=()=>{saveDeal();saveSession();};dp.addEventListener("input",save);dp.addEventListener("change",()=>{save();syncDraftToRecord();});}})();
 applyRole();
 if(SESSION&&SESSION.role){routeToRole();updateBizPill();}
+else if(readVipHandoff()){setMode("biz");openCustomerFromHandoff(readVipHandoff());}   // 從 VIP 入口頁帶進來
 else{setMode("biz");showEntryGate();}
 updateInboxBtn();
 
