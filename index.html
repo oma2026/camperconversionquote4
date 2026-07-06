@@ -420,7 +420,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 #printDoc{display:none}
 @media print{
   body{background:#fff}
-  #bizView,#adminView,#buyerView,#acctView,#techView,#cashierView,#mobar,.topbar,.toast,#setModal{display:none!important}
+  #bizView,#adminView,#buyerView,#acctView,#techView,#cashierView,#mobar,.topbar,.toast,#setModal,.modal-back,.modal-ov,#quotePanel{display:none!important}
   #printDoc{display:block!important}
   @page{margin:12mm}
   .pd{max-width:100%!important;width:100%!important;margin:0!important}
@@ -1104,12 +1104,8 @@ function renderDealsList(){
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
             <button class="abtn" style="${r.depositPaid?'background:#2f7d4f;color:#fff;border-color:#2f7d4f':''}" onclick="toggleDepositPaid('${r.id}')">${r.depositPaid?'✓ 訂金已付':'訂金未付'}</button>
             <button class="abtn" onclick="printContractDoc('${r.id}')" style="border-color:#111;font-weight:800">📄 列印合約書</button>
-            ${ci.has
-              ? `<button class="abtn" onclick="viewContract('${r.id}')">📄 看合約</button><button class="abtn warn" onclick="removeContract('${r.id}')">移除合約</button>`
-              : `<label class="abtn" style="cursor:pointer;margin:0">⬆ 上傳合約<input type="file" accept="image/*,application/pdf" style="display:none" onchange="onContractPick('${r.id}',this)"></label>`}
-            <span style="font-size:12.5px;color:var(--ink-soft)">${ci.has?'已上傳：'+esc(ci.name):'合約可拍照或上傳 PDF'}</span>
           </div>
-        </div>`:`<div class="deal-row3" style="color:var(--ink-soft);font-size:13px">按上面「未成交」切成「已成交」後，才能填成交價、上傳合約與登記訂金。</div>`}
+        </div>`:`<div class="deal-row3" style="color:var(--ink-soft);font-size:13px">按上面「未成交」切成「已成交」後，才能填成交價、列印合約與登記訂金。</div>`}
       </div>`;
   }).join("");
 }
@@ -2882,8 +2878,7 @@ function recordsHTML(){
       const mp=(rev>0&&r.totalCost>0)?((rev-r.totalCost)/rev*100):null;
       const mcls=mp==null?"":(mp<20?"margin-low":"margin-good");
       const dbase=(r.deal!=null&&r.deal>0)?r.deal:r.total;
-      const ci=contractInfo(r.id);
-      const ready=!!(r.confirmed&&r.depositPaid&&ci.has);
+      const ready=!!(r.confirmed&&r.depositPaid);
       const itemRows=r.items.map(it=>`
         <tr>
           <td>${it.name}${it.model?` <span style="color:var(--ink-soft);font-size:12px">${it.model}</span>`:""}</td>
@@ -2906,7 +2901,6 @@ function recordsHTML(){
             ${r.deal!=null?`<span class="rec-total" style="color:#2f7d4f">成交 NT$${fmt(r.deal)}</span>`:`<span class="rec-total" style="color:var(--ink-soft)">成交 未填</span>`}
             ${mp==null?"":`<span class="rec-margin ${mcls}">毛利 ${mp.toFixed(0)}%</span>`}
             ${r.confirmed?`<span style="font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;${r.depositPaid?'background:#e6f4ea;color:#2f7d4f':'background:#fdecea;color:#c0392b'}">${r.depositPaid?'訂金已付':'訂金未付'}</span>
-            <span style="font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;${ci.has?'background:#e6f4ea;color:#2f7d4f':'background:#f0efe9;color:#8a8a80'}">${ci.has?'有合約':'無合約'}</span>
             ${ready?`<span style="font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;background:#2f7d4f;color:#fff">✓ 可下定</span>`:""}`:""}
           </div>
         </summary>
@@ -2927,9 +2921,9 @@ function recordsHTML(){
             <div style="font-size:13.5px;margin-bottom:8px">訂金（${depositPctVal()}%）：<b style="color:var(--rust)">NT$${fmt(depositAmt(dbase))}</b>　·　尾款：<b>NT$${fmt(balanceAmt(dbase))}</b></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
               <button class="abtn" style="${r.depositPaid?'background:#2f7d4f;color:#fff;border-color:#2f7d4f':''}" onclick="toggleDepositPaid('${r.id}')">${r.depositPaid?'✓ 訂金已付':'標記訂金未付'}</button>
-              ${ci.has?`<button class="abtn" onclick="viewContract('${r.id}')">📄 看合約${ci.name?'（'+esc(ci.name)+'）':''}</button>`:`<span style="font-size:13px;color:var(--ink-soft)">尚未上傳合約（由業務端上傳）</span>`}
+              <button class="abtn" onclick="printContractDoc('${r.id}')" style="border-color:#111;font-weight:800">📄 列印合約書</button>
             </div>
-            <div style="margin-top:8px;font-size:13.5px;font-weight:800;${ready?'color:#2f7d4f':'color:var(--rust)'}">${ready?'✓ 合約已簽、訂金已付 → 可以跟國外下定':'⚑ 尚不可下定：需「合約已上傳」且「訂金已付」'}</div>
+            <div style="margin-top:8px;font-size:13.5px;font-weight:800;${ready?'color:#2f7d4f':'color:var(--rust)'}">${ready?'✓ 訂金已付 → 可以跟國外下定':'⚑ 尚不可下定：需先「訂金已付」'}</div>
           </div>`:""}
           <button class="abtn" style="margin-right:8px;${r.confirmed?'':'background:#2f7d4f;color:#fff;border-color:#2f7d4f'}" onclick="toggleConfirm('${r.id}')">${r.confirmed?'↩ 取消成交':'✓ 標記為已成交'}</button>
           <button class="abtn rec-print" style="margin-right:8px" onclick="reprintRecord('${r.id}')">重新列印報價單</button>
