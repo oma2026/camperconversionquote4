@@ -1489,9 +1489,9 @@ function headerLogout(){
 function updateTopLogout(){
   const b=document.getElementById("topLogout");if(!b)return;
   const inCust=document.body.classList.contains("custmode");
-  const show=inCust||!!(SESSION&&SESSION.role);
+  const show=!inCust && !!(SESSION&&SESSION.role);   // 客戶模式不顯示店內登出/離開鈕（避免走到員工閘門）；客戶改用入口頁右上角「登出」
   b.style.display=show?"":"none";
-  b.textContent=inCust?"⏻ 離開":"⏻ 登出";
+  b.textContent="⏻ 登出";
 }
 function bizNav(){
   if(curMode==="biz"&&(SESSION&&SESSION.role==="biz")){openLogin();return;}
@@ -1647,9 +1647,16 @@ function openCustomerFromHandoff(h){
     var g=document.getElementById("entryGate"); if(g)g.style.display="none";
     pickCustomer();   // 開客戶資料視窗 + 帶入可選車型
     window._handoff={pin:(h.pass||"").trim().toLowerCase(), rep:h.rep||null};
-    var nm=document.getElementById("ciName"); if(nm)nm.value=(h.name||"").trim();
-    var pin=document.getElementById("ciPin"); if(pin)pin.value=(h.pass||"").trim();
-    var err=document.getElementById("ciErr"); if(err)err.textContent="請選擇您選購的車型後開始";
+    // 入口頁已填過姓名+密碼 → 這裡把這兩欄藏起來，客戶只要選車型
+    var nm=document.getElementById("ciName"); if(nm){ nm.value=(h.name||"").trim(); nm.style.display="none"; if(nm.previousElementSibling)nm.previousElementSibling.style.display="none"; }
+    var pin=document.getElementById("ciPin"); if(pin){ pin.value=(h.pass||"").trim(); pin.style.display="none"; if(pin.previousElementSibling)pin.previousElementSibling.style.display="none"; }
+    var modal=document.getElementById("custInfoModal");
+    if(modal){
+      var h2=modal.querySelector("h2"); if(h2)h2.textContent="歡迎，"+((h.name||"").trim()||"貴賓")+"！";
+      var sub=modal.querySelector("p"); if(sub)sub.textContent="請選擇您選購的車型，即可開始挑選配。";
+      var back=modal.querySelector("button.abtn"); if(back)back.style.display="none";   // 從入口頁進來，不用返回員工閘門
+    }
+    var err=document.getElementById("ciErr"); if(err)err.textContent="";
     var car=document.getElementById("ciCar"); if(car&&car.focus)setTimeout(function(){car.focus();},80);
   }catch(e){}
 }
@@ -3587,8 +3594,8 @@ renderQuote();
 });
 (function(){const dp=document.getElementById("dealPrice");if(dp){const save=()=>{saveDeal();saveSession();};dp.addEventListener("input",save);dp.addEventListener("change",()=>{save();syncDraftToRecord();});}})();
 applyRole();
-if(SESSION&&SESSION.role){routeToRole();updateBizPill();}
-else if(readVipHandoff()){setMode("biz");openCustomerFromHandoff(readVipHandoff());}   // 從 VIP 入口頁帶進來
+if(readVipHandoff()){setMode("biz");openCustomerFromHandoff(readVipHandoff());}   // 從 VIP 入口頁帶進來（最優先，蓋過本機殘留的員工/管理登入）
+else if(SESSION&&SESSION.role){routeToRole();updateBizPill();}
 else{setMode("biz");showEntryGate();}
 updateInboxBtn();
 
