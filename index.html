@@ -171,8 +171,8 @@ body.custmode .bizpill{display:none!important}
   transition:.15s;position:relative;
 }
 .item:hover{border-color:var(--line-2);transform:translateY(-1px)}
-.item-photo{margin:-13px -13px 0;border-radius:var(--radius) var(--radius) 0 0;overflow:hidden;background:#efeee9}
-.item-photo img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover}
+.item-photo{margin:0;border-radius:10px;overflow:hidden;background:#f6f5f1}
+.item-photo img{display:block;width:100%;aspect-ratio:4/3;object-fit:contain;padding:6px}
 .item .name{font-size:15px;font-weight:700;line-height:1.35;color:var(--ink)}
 .item .model{
   display:inline-block;align-self:flex-start;font-size:11.5px;font-weight:700;color:var(--pine);
@@ -1467,7 +1467,23 @@ function tryLogin(){
   err.textContent="";document.getElementById("bizPw").value="";
   applyRole();closeLogin();routeToRole();updateBizPill();
 }
+/* ===== 自動登出：閒置 10 分鐘 或 登入滿 1 小時 ===== */
+var _idleTimer=null,_absTimer=null,_autoOn=false;
+function autoLogoutNow(){
+  try{
+    if(window.self!==window.top){   // 客戶在 VIP 入口頁 iframe 內 → 回入口頁登入
+      try{ sessionStorage.removeItem("oma_vip_handoff"); }catch(e){}
+      window.top.location.reload(); return;
+    }
+  }catch(e){}
+  if(typeof logout==="function") logout();   // 員工 → 回入口閘門
+}
+function _resetIdle(){ if(!_autoOn) return; clearTimeout(_idleTimer); _idleTimer=setTimeout(autoLogoutNow,600000); }   // 10 分鐘
+function startAutoLogout(){ if(_autoOn) return; _autoOn=true; clearTimeout(_absTimer); _absTimer=setTimeout(autoLogoutNow,3600000); _resetIdle(); }   // 絕對 1 小時
+function stopAutoLogout(){ _autoOn=false; clearTimeout(_idleTimer); clearTimeout(_absTimer); }
+["mousemove","mousedown","keydown","touchstart","scroll","click"].forEach(function(ev){ try{ document.addEventListener(ev,_resetIdle,true); }catch(e){} });
 function logout(){
+  stopAutoLogout();
   SESSION.role=null;SESSION.bizRep=null;saveSession();
   document.body.classList.remove("custmode");closeDeals();
   applyRole();updateBizPill();updateTopLogout();
@@ -1492,6 +1508,7 @@ function updateTopLogout(){
   const show=!inCust && !!(SESSION&&SESSION.role);   // 客戶模式不顯示店內登出/離開鈕（避免走到員工閘門）；客戶改用入口頁右上角「登出」
   b.style.display=show?"":"none";
   b.textContent="⏻ 登出";
+  if((inCust || (SESSION&&SESSION.role)) && typeof startAutoLogout==="function") startAutoLogout();   // 有登入/客戶模式 → 啟動自動登出計時
 }
 function bizNav(){
   if(curMode==="biz"&&(SESSION&&SESSION.role==="biz")){openLogin();return;}
@@ -1676,7 +1693,7 @@ function submitCustomer(){
   ["cName","cCar","cOther","cNote"].forEach(id=>{const e=document.getElementById(id);if(e)e.value="";});
   updateInboxBtn();
   alert("已送出，感謝您！業務 "+custInfo.rep+" 很快會與您聯繫。");
-  showEntryGate();
+  if(typeof autoLogoutNow==="function") autoLogoutNow(); else showEntryGate();   // 客戶送出後自動登出（VIP 回入口頁）
 }
 /* ---------- 客戶送單匣（業務端） ---------- */
 function updateInboxBtn(){
@@ -1942,7 +1959,7 @@ body{font-family:"PingFang TC","Noto Sans TC","Microsoft JhengHei",system-ui,san
 .sub{font-weight:800;color:#171717;margin:16px 0 10px;font-size:13.5px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
 .card{background:#fff;border:1px solid #e5e5e2;border-radius:14px;padding:13px;display:flex;flex-direction:column;gap:7px}
-.ph{margin:-14px -14px 0;border-radius:14px 14px 0 0;overflow:hidden;background:#efeee9}.ph img{width:100%;aspect-ratio:1/1;object-fit:cover;display:block}
+.ph{margin:0;border-radius:10px;overflow:hidden;background:#f6f5f1}.ph img{width:100%;aspect-ratio:4/3;object-fit:contain;padding:6px;display:block}
 .mdl{align-self:flex-start;font-size:11.5px;font-weight:700;color:#333;background:#f0f0ee;border:1px solid #dcdcd7;border-radius:6px;padding:2px 7px}
 .nm{font-size:15px;font-weight:700;line-height:1.35}
 .incl{font-size:12px;color:#2f7d4f;font-weight:700}.note{font-size:12px;color:#b3541e;font-weight:600}
