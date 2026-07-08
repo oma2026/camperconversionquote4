@@ -198,7 +198,8 @@ body.custmode .bizpill{display:none!important}
 /* ---------- Quote panel ---------- */
 .quote{
   position:sticky;top:88px;background:var(--card);border:1px solid var(--line);
-  border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;
+  border-radius:var(--radius);box-shadow:var(--shadow);
+  max-height:calc(100vh - 104px);overflow-y:auto;overflow-x:hidden;
 }
 .quote-head{background:var(--pine);color:#f0f0ee;padding:14px 16px}
 .quote-head .qt{display:flex;align-items:center;justify-content:space-between}
@@ -2102,7 +2103,7 @@ document.getElementById("pin").focus();
 /* ---------- catalog (business) ---------- */
 function renderCatTabs(){
   const wrap=document.getElementById("catTabs");
-  if(!activeCat)activeCat=DB.categories[0].id;
+  if(!activeCat)activeCat="__all";
   wrap.innerHTML="";
   const all=document.createElement("button");
   all.className="cattab"+(activeCat==="__all"?" active":"");
