@@ -1104,17 +1104,18 @@ function renderDealsList(){
             <button class="deal-status ${r.confirmed?'on':''}" onclick="toggleConfirm('${r.id}')">${r.confirmed?'已成交':'未成交'}</button>
           </span>
         </div>
-        ${r.confirmed?`<div class="deal-row3">
+        <div class="deal-row3">
           <span>成交價 NT$</span>
-          <input type="number" min="0" value="${r.deal==null?'':r.deal}" placeholder="輸入成交價" onchange="setRecordDeal('${r.id}',this.value)">
+          <input type="number" min="0" value="${r.deal==null?'':r.deal}" placeholder="${r.confirmed?'輸入成交價':'填成交價＝自動成交'}" onchange="setRecordDeal('${r.id}',this.value)">
         </div>
         <div style="margin-top:8px;padding-top:10px;border-top:1px dashed var(--line-2)">
           <div style="font-size:13.5px;margin-bottom:8px">訂金（${depositPctVal()}%）：<b style="color:var(--rust)">NT$${fmt(depositAmt(base))}</b>　·　尾款：<b>NT$${fmt(balanceAmt(base))}</b></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-            <button class="abtn" style="${r.depositPaid?'background:#2f7d4f;color:#fff;border-color:#2f7d4f':''}" onclick="toggleDepositPaid('${r.id}')">${r.depositPaid?'✓ 訂金已付':'訂金未付'}</button>
-            <button class="abtn" onclick="printContractDoc('${r.id}')" style="border-color:#111;font-weight:800">📄 列印合約書</button>
+            <button class="abtn" ${r.confirmed?'':'disabled'} style="${r.confirmed?(r.depositPaid?'background:#2f7d4f;color:#fff;border-color:#2f7d4f':''):'opacity:.4;cursor:not-allowed'}" onclick="toggleDepositPaid('${r.id}')">${r.depositPaid?'✓ 訂金已付':'訂金未付'}</button>
+            <button class="abtn" ${r.confirmed?'':'disabled'} onclick="printContractDoc('${r.id}')" style="border-color:#111;font-weight:800;${r.confirmed?'':'opacity:.4;cursor:not-allowed'}">📄 列印合約書</button>
           </div>
-        </div>`:`<div class="deal-row3" style="color:var(--ink-soft);font-size:13px">按上面「未成交」切成「已成交」後，才能填成交價、列印合約與登記訂金。</div>`}
+          ${r.confirmed?'':'<div style="margin-top:8px;color:var(--ink-soft);font-size:12.5px">👆 填上面的「成交價」就會自動成交，訂金／合約跟著亮起來。（或按右上「未成交」也可）</div>'}
+        </div>
       </div>`;
   }).join("");
 }
@@ -1344,6 +1345,7 @@ function removeContract(recordId){
 }
 function toggleDepositPaid(recordId){
   const r=(SESSION.records||[]).find(x=>x.id===recordId);if(!r)return;
+  if(!_bizGuard("dep"+recordId,500))return;
   r.depositPaid=!r.depositPaid;saveSession();fbUpdateRecord(recordId,{depositPaid:r.depositPaid});
   refreshRecViews();
 }
@@ -1379,6 +1381,10 @@ function findItem(id){
   return null;
 }
 function toast(msg){const t=document.getElementById("toast");t.textContent=msg;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),1900);}
+/* ===== 改裝業務端 房呆／防呆 helpers（2026-07-09 新增）===== */
+function _bizName(){ var e=document.getElementById("cName"); return e?String(e.value||"").trim():""; }
+function _bizRequireName(){ if(_bizName())return true; toast("請先填客戶名稱再繼續"); var e=document.getElementById("cName"); if(e){try{e.focus();}catch(_){}} return false; }
+function _bizGuard(key,ms){ if(!window._bizLock)window._bizLock={}; var t=Date.now(); if(window._bizLock[key]&&(t-window._bizLock[key])<(ms||1200))return false; window._bizLock[key]=t; return true; }
 
 /* ---------- mode ---------- */
 function populateLoginSel(){
@@ -1683,6 +1689,7 @@ function submitCustomer(){
   const co=document.getElementById("cOther"),cnt=document.getElementById("cNote");
   const other=(co?co.value:"").trim(),note=(cnt?cnt.value:"").trim();
   if(!ids.length&&!other&&!note){alert("您還沒有選任何項目喔");return;}
+  if(!_bizGuard("submitCustomer",2500))return;
   const items=ids.map(id=>{const f=findItem(id);const it=f?f.item:{};return {i:id,q:quote[id].qty,n:it.name||"",mo:it.model||""};});
   const sub={id:"S"+Date.now()+"_"+Math.random().toString(36).slice(2,5),ts:Date.now(),rep:custInfo.rep,name:custInfo.name,car:custInfo.car,items:items,other:other,note:note};
   SESSION.inbox.push(sub);
@@ -2209,13 +2216,15 @@ function clearAll(){
 }
 function saveQuote(){
   if(!Object.keys(quote).length){toast("報價單是空的");return;}
+  if(!_bizRequireName())return;
+  if(!_bizGuard("saveQuote"))return;
   const name=document.getElementById("cName").value||"—";
   const car=document.getElementById("cCar").value||"—";
   recordQuote(name,car);refreshRecViews();toast("已儲存報價");
 }
 function newQuote(){
   editingRecordId=null;
-  if(Object.keys(quote).length){
+  if(Object.keys(quote).length && _bizName()){
     const name=document.getElementById("cName").value||"—";
     const car=document.getElementById("cCar").value||"—";
     recordQuote(name,car);refreshRecViews();toast("已儲存目前報價，開新的一張");
@@ -2293,6 +2302,8 @@ function toggleQuote(open){document.getElementById("quotePanel").classList.toggl
 /* ---------- print ---------- */
 function printQuote(){
   const ids=Object.keys(quote);if(!ids.length){toast("報價單是空的");return;}
+  if(!_bizRequireName())return;
+  if(!_bizGuard("printQuote"))return;
   const name=document.getElementById("cName").value||"—";
   const car=document.getElementById("cCar").value||"—";
   const rep=currentRep||"—";
@@ -2408,6 +2419,7 @@ function printNow(){
 function printContractDoc(recordId){
   const r=(SESSION.records||[]).find(x=>x.id===recordId);
   if(!r){toast("找不到這筆紀錄");return;}
+  if(!_bizGuard("contract"+recordId,800))return;
   const listTotal=Number(r.total)||0;
   const total=(r.deal!=null&&r.deal>0)?Number(r.deal):listTotal;   // 合約總價＝成交價（未填則帶報價金額）
   const dealDiscount=Math.max(0,listTotal-total);                  // 議價折讓
@@ -2893,10 +2905,13 @@ function recordQuote(name,car){
 function setRecordDeal(id,v){
   const r=(SESSION.records||[]).find(x=>x.id===id);if(!r)return;
   r.deal=(v===""||v==null)?null:Math.max(0,Math.round(parseFloat(v)||0));
-  saveSession();refreshRecViews();fbUpdateRecord(id,{deal:r.deal});
+  var patch={deal:r.deal};
+  if(r.deal!=null && r.deal>0 && !r.confirmed){ r.confirmed=true; patch.confirmed=true; toast("已自動標記為成交"); }  // 填成交價＝自動成交
+  saveSession();refreshRecViews();fbUpdateRecord(id,patch);
 }
 function toggleConfirm(id){
   const r=(SESSION.records||[]).find(x=>x.id===id);if(!r)return;
+  if(!_bizGuard("confirm"+id,500))return;
   r.confirmed=!r.confirmed;
   saveSession();
   refreshRecViews();fbUpdateRecord(id,{confirmed:r.confirmed});
