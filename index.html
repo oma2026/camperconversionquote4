@@ -256,7 +256,7 @@ body.custmode .biz-subtabs{display:none!important}
 .ac-val{font-size:22px;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums}
 .modal-back{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:300;align-items:flex-start;justify-content:center;padding:40px 16px;overflow:auto}
 .modal-back.gate{background:#171717}
-#entryGate{align-items:center}
+#entryGate,#bizLock{align-items:center}
 #custInfoModal{align-items:center;background:#171717}
 #inboxModal{align-items:center}
 #entryLogo img{height:30px;width:auto;display:block}
@@ -641,10 +641,11 @@ body.custmode .cust-exit{display:inline-flex!important}
       <button onclick="logout()">登出</button>
     </div>
   </div>
-  <div id="bdCodeModal"><div class="bdc-card">
-    <button class="qclose" style="position:absolute;top:12px;right:14px;border:none;background:none;font-size:20px;cursor:pointer;color:var(--ink-soft)" onclick="closeMyCustCode()">✕</button>
+  <div id="bdCodeModal" onclick="if(event.target===this)closeMyCustCode()"><div class="bdc-card">
+    <button onclick="closeMyCustCode()" title="關閉" style="position:absolute;top:10px;right:12px;border:none;background:var(--paper-2);width:32px;height:32px;border-radius:9px;font-size:17px;line-height:1;cursor:pointer;color:var(--ink);display:flex;align-items:center;justify-content:center">✕</button>
     <h3 style="margin:0 0 6px;font-size:19px">我的客戶代碼</h3>
     <div id="bdCodeBody"></div>
+    <button onclick="closeMyCustCode()" style="width:100%;margin-top:12px;padding:11px;border:1px solid var(--line-2);background:var(--card);color:var(--ink-soft);border-radius:10px;font-weight:700;font-size:14.5px;cursor:pointer">關閉</button>
   </div></div>
   <div id="bizCases" style="display:none">
     <div class="bc-head">
