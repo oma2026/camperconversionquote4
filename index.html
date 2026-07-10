@@ -1457,6 +1457,7 @@ function toggleDepositPaid(recordId){
   var _role=SESSION&&SESSION.role;
   if(!(_role==="cashier"||_role==="admin")){ toast("只有出納能確認訂金收款"); return; }
   if(!_bizGuard("dep"+recordId,500))return;
+  if(!confirm(r.depositPaid?"取消訂金確認？這筆會退回「待出納確認」、不算成交。":"確認這筆「訂金已收」並正式成交？\n（成交數字、業務端都會顯示已成交）")) return;
   r.depositPaid=!r.depositPaid; r.confirmed=r.depositPaid;   // 出納確認訂金＝成交
   saveSession();fbUpdateRecord(recordId,{depositPaid:r.depositPaid,confirmed:r.confirmed});
   refreshRecViews();
@@ -1675,6 +1676,7 @@ function caseUploadSigned(recordId,input){
 function caseMarkOrdered(recordId){
   var r=(SESSION.records||[]).find(function(x){return x.id===recordId;}); if(!r)return;
   if(!_bizGuard("ord"+recordId,500))return;
+  if(!confirm(r.ordered?"取消「公司已下定」？":"確認公司已下定（向供應商／原廠下單）？")) return;
   r.ordered=!r.ordered; saveSession(); if(typeof fbUpdateRecord==="function")fbUpdateRecord(recordId,{ordered:r.ordered});
   toast(r.ordered?"已標記公司下定":"已取消公司下定");
   refreshRecViews();
