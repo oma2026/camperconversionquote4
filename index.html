@@ -1023,7 +1023,7 @@ let acctFilter={y:"",m:""}, cashierFilter={y:"",m:""};
 let buyerFilter={y:"",m:""}, techFilter={y:"",m:""}, adminRecPeriod={y:"",m:""};
 let adminRecStatus="all", dragCarIdx=null, buyerPurFilter="all", cashierPayFilter="open", techInstallFilter="open";
 function setTechInstallFilter(v){techInstallFilter=v;renderTech();}
-function toggleInstalled(id){const r=(SESSION.records||[]).find(x=>x.id===id);if(!r)return;r.installed=!r.installed;saveSession();renderTech();fbUpdateRecord(id,{installed:r.installed});}
+function toggleInstalled(id){const r=(SESSION.records||[]).find(x=>x.id===id);if(!r)return;if(!confirm(r.installed?"改回「待安裝」？":"確認這筆已「安裝完成」？")) return;r.installed=!r.installed;saveSession();renderTech();fbUpdateRecord(id,{installed:r.installed});}
 function setCashierPayFilter(v){cashierPayFilter=v;renderCashier();}
 function setBuyerPurFilter(v){buyerPurFilter=v;renderBuyer();}
 function togglePurchased(id){const r=(SESSION.records||[]).find(x=>x.id===id);if(!r)return;r.purchased=!r.purchased;saveSession();renderBuyer();fbUpdateRecord(id,{purchased:r.purchased});}
@@ -2821,7 +2821,7 @@ function tryCashier(){
   if(v===DB.cashierPin){cashierUnlocked=true;document.getElementById("cashierErr").textContent="";document.getElementById("cashierPin").value="";setMode("cashier");}
   else document.getElementById("cashierErr").textContent="密碼錯誤";
 }
-function toggleCashier(id){const r=(SESSION.records||[]).find(x=>x.id===id);if(!r)return;r.paid=!r.paid;saveSession();refreshRecViews();fbUpdateRecord(id,{paid:r.paid});}
+function toggleCashier(id){const r=(SESSION.records||[]).find(x=>x.id===id);if(!r)return;if(!confirm(r.paid?"取消「已收款」？":"確認這筆已「全額收款」完成？")) return;r.paid=!r.paid;saveSession();refreshRecViews();fbUpdateRecord(id,{paid:r.paid});}
 function renderCashier(){
   const p=document.getElementById("cashierPanel");
   const all=(SESSION.records||[]).filter(r=> r.hasContract || r.confirmed);
