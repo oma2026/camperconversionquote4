@@ -1454,8 +1454,11 @@ function removeContract(recordId){
 }
 function toggleDepositPaid(recordId){
   const r=(SESSION.records||[]).find(x=>x.id===recordId);if(!r)return;
+  var _role=SESSION&&SESSION.role;
+  if(!(_role==="cashier"||_role==="admin")){ toast("只有出納能確認訂金收款"); return; }
   if(!_bizGuard("dep"+recordId,500))return;
-  r.depositPaid=!r.depositPaid;saveSession();fbUpdateRecord(recordId,{depositPaid:r.depositPaid});
+  r.depositPaid=!r.depositPaid; r.confirmed=r.depositPaid;   // 出納確認訂金＝成交
+  saveSession();fbUpdateRecord(recordId,{depositPaid:r.depositPaid,confirmed:r.confirmed});
   refreshRecViews();
 }
 
@@ -1528,19 +1531,20 @@ function closeLogin(){document.getElementById("bizLock").style.display="none";}
 function bizCaseStats(){
   var recs=(SESSION.records||[]).filter(function(r){return r.rep===currentRep;});
   var inbox=(SESSION.inbox||[]).filter(function(s){return !s.rep || s.rep===currentRep;});
-  var st={submitted:inbox.length,quoted:0,contract:0,dealt:0,ready:0};
+  var st={submitted:inbox.length,quoted:0,contract:0,awaiting:0,dealt:0};
   recs.forEach(function(r){
     if(r.ordered)return;
-    if(r.confirmed){ if(r.depositPaid&&r.hasContract)st.ready++; else st.dealt++; }
-    else if(r.contractGenerated)st.contract++;
-    else st.quoted++;
+    if(r.confirmed){ st.dealt++; }
+    else if(r.hasContract){ st.awaiting++; }
+    else if(r.contractGenerated){ st.contract++; }
+    else { st.quoted++; }
   });
   return st;
 }
 function refreshBizDash(){
   var s=bizCaseStats();
   var el=document.getElementById("bdStats");
-  if(el){ var sd=[["客戶已送出",s.submitted],["已報價",s.quoted],["待上傳合約",s.contract],["已成交",s.dealt],["待公司下定",s.ready]];
+  if(el){ var sd=[["客戶已送出",s.submitted],["已報價",s.quoted],["待上傳合約",s.contract],["待出納確認訂金",s.awaiting],["已成交",s.dealt]];
     el.innerHTML=sd.map(function(x){return '<div class="bd-stat"><div class="n">'+x[1]+'</div><div class="l">'+x[0]+'</div></div>';}).join(""); }
   var b=document.getElementById("bdSubBadge"); if(b)b.textContent=s.submitted;
   var hi=document.getElementById("bdHi"); if(hi){ var rp=REPS[currentRep]||{}; hi.textContent="Hi，"+(rp.zh||rp.title||currentRep||"業務"); }
@@ -1599,20 +1603,26 @@ function caseStageCamper(it){
   if(it.type==='sub')return 'submitted';
   var r=it._raw;
   if(r.ordered)return 'ordered';
-  if(r.confirmed)return (r.depositPaid&&r.hasContract)?'ready':'dealt';
+  if(r.confirmed)return 'dealt';
+  if(r.hasContract)return 'awaiting';
   if(r.contractGenerated)return 'contract';
   return 'quoted';
 }
-function caseStageLabelCamper(k){return ({submitted:'客戶已送出',quoted:'已報價',contract:'待上傳合約',dealt:'已成交',ready:'待公司下定',ordered:'已下定'})[k]||k;}
-function caseBadgeClsCamper(k){return ({submitted:'cb-submitted',quoted:'cb-quoted',contract:'cb-quoted',dealt:'cb-dealt',ready:'cb-ready',ordered:'cb-ordered'})[k]||'cb-submitted';}
+function caseStageLabelCamper(k){return ({submitted:'客戶已送出',quoted:'已報價',contract:'待上傳合約',awaiting:'待出納確認訂金',dealt:'已成交',ordered:'已下定'})[k]||k;}
+function caseBadgeClsCamper(k){return ({submitted:'cb-submitted',quoted:'cb-quoted',contract:'cb-quoted',awaiting:'cb-ready',dealt:'cb-dealt',ordered:'cb-ordered'})[k]||'cb-submitted';}
+function _recStageBadge(r){
+  var k=caseStageCamper({type:'rec',_raw:r});
+  var lbl=caseStageLabelCamper(k);
+  var c=({quoted:'background:#e7f1fb;color:#1c6fb8',contract:'background:#e7f1fb;color:#1c6fb8',awaiting:'background:#fdf0da;color:#a86a12',dealt:'background:#e6f4ea;color:#2f7d4f',ordered:'background:#171717;color:#fff'})[k]||'background:#f0efe9;color:#8a8a80';
+  return '<span style="font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;'+c+'">'+lbl+'</span>';
+}
 function caseMoreCamper(it){
   var m=[];
   if(it.type==='rec'){
     m.push('<button class="case-mi" onclick="editRecord(\''+it.id+'\')">查看 / 修改</button>');
     if(it._raw.hasContract)m.push('<button class="case-mi" onclick="viewContract(\''+it.id+'\')">檢視客戶簽名合約</button>');
-    m.push('<button class="case-mi" onclick="toggleConfirm(\''+it.id+'\')">'+(it._raw.confirmed?'↩ 取消成交':'✓ 標記成交')+'</button>');
     if(it._raw.ordered)m.push('<button class="case-mi" onclick="caseMarkOrdered(\''+it.id+'\')">↩ 取消公司下定</button>');
-    else if(it._raw.confirmed&&it._raw.depositPaid&&it._raw.hasContract)m.push('<button class="case-mi" onclick="caseMarkOrdered(\''+it.id+'\')">✓ 標記公司已下定</button>');
+    else if(it._raw.confirmed)m.push('<button class="case-mi" onclick="caseMarkOrdered(\''+it.id+'\')">✓ 標記公司已下定</button>');
     m.push('<button class="case-mi danger" onclick="deleteRecord(\''+it.id+'\')">刪除案件</button>');
   }else{
     m.push('<button class="case-mi danger" onclick="deleteSubmission(\''+it.id+'\')">刪除送單</button>');
@@ -1633,15 +1643,18 @@ function caseCardCamper(it){
     var uplBtn=gen
       ?'<label class="cbtn dark" style="cursor:pointer">📎 '+(signed?'重新上傳簽名合約':'上傳客戶已簽名合約')+'<input type="file" accept="application/pdf,image/*" style="display:none" onchange="caseUploadSigned(\''+it.id+'\',this)"></label>'
       :'<button class="cbtn dis" disabled>📎 上傳客戶已簽名合約</button>';
-    inner='<div class="case-deal"><span>成交價 NT$</span><input type="number" min="0" value="'+(r.deal==null?'':r.deal)+'" placeholder="'+(conf?'輸入成交價':'填成交價＝自動成交')+'" onchange="setRecordDeal(\''+it.id+'\',this.value)"></div>'
-      +'<div class="case-dep">訂金（'+depositPctVal()+'%）：<b style="color:var(--rust)">NT$'+fmt(depositAmt(base))+'</b> · 尾款：<b>NT$'+fmt(balanceAmt(base))+'</b></div>'
+    var depStatus=conf
+      ?'<span style="color:var(--good);font-weight:800">✓ 出納已確認訂金（已成交）</span>'
+      :(signed?'<span style="color:#a86a12;font-weight:800">⏳ 待出納確認訂金</span>':'<span style="color:var(--ink-soft)">訂金：上傳簽名合約後由出納確認</span>');
+    inner='<div class="case-deal"><span>成交價 NT$</span><input type="number" min="0" value="'+(r.deal==null?'':r.deal)+'" placeholder="輸入成交價" onchange="setRecordDeal(\''+it.id+'\',this.value)"></div>'
+      +'<div class="case-dep">訂金（'+depositPctVal()+'%）：<b style="color:var(--rust)">NT$'+fmt(depositAmt(base))+'</b> · 尾款：<b>NT$'+fmt(balanceAmt(base))+'</b>　·　'+depStatus+'</div>'
       +'<div class="case-actrow">'
       +'<button class="cbtn" onclick="reprintRecord(\''+it.id+'\')">📄 下載報價單</button>'
       +'<button class="cbtn dark" onclick="caseGenContract(\''+it.id+'\')">📄 '+(gen?'下載':'產生')+'簽約文件</button>'
       +uplBtn
-      +'<button class="cbtn'+(r.depositPaid?' paid':'')+(conf?'':' dis')+'" '+(conf?'':'disabled ')+'onclick="toggleDepositPaid(\''+it.id+'\')">'+(r.depositPaid?'✓ 訂金已付':'訂金未付')+'</button>'
       +caseMoreCamper(it)+'</div>'
-      +((gen&&!signed)?'<div style="margin-top:8px;color:var(--ink-soft);font-size:12.5px">客戶簽名後，上傳「已簽名合約」即自動成交（成交金額預設為報價金額，可再改）。</div>':'');
+      +((gen&&!signed)?'<div style="margin-top:8px;color:var(--ink-soft);font-size:12.5px">客戶簽名後，上傳「已簽名合約」→ 自動通知出納確認訂金 → 出納確認後才算成交。</div>':'')
+      +((signed&&!conf)?'<div style="margin-top:8px;color:#a86a12;font-size:12.5px">✅ 已通知出納。等出納在「出納」頁確認「訂金已收」後，這筆才算成交。</div>':'');
   }
   return '<div class="case-card"><div class="cc-top"><div><div class="cc-cust">'+esc(it.cust)+'</div><div class="cc-sub">'+sub+'</div></div><span class="case-badge '+caseBadgeClsCamper(k)+'">'+caseStageLabelCamper(k)+'</span></div>'+(money?'<div class="case-money">'+money+'</div>':'')+inner+'</div>';
 }
@@ -1655,7 +1668,8 @@ function caseUploadSigned(recordId,input){
   if(!(input&&input.files&&input.files[0]))return;
   if(typeof onContractPick==="function")onContractPick(recordId,input);   // 存合約檔（非同步）+ 設 hasContract
   var r=(SESSION.records||[]).find(function(x){return x.id===recordId;});
-  if(r&&!r.confirmed){ r.confirmed=true; if(r.deal==null||r.deal===0)r.deal=r.total; saveSession(); if(typeof fbUpdateRecord==="function")fbUpdateRecord(recordId,{confirmed:true,deal:r.deal}); toast("已上傳客戶簽名合約，並自動標記成交"); }
+  if(r && (r.deal==null||r.deal===0)){ r.deal=r.total; saveSession(); if(typeof fbUpdateRecord==="function")fbUpdateRecord(recordId,{deal:r.deal}); }
+  toast("已上傳客戶簽名合約，已通知出納確認訂金");
   refreshRecViews();
 }
 function caseMarkOrdered(recordId){
@@ -1667,7 +1681,7 @@ function caseMarkOrdered(recordId){
 }
 function renderBizCases(){
   var s=bizCaseStats(),el=document.getElementById("bcStats");
-  if(el){ var sd=[["客戶已送出",s.submitted],["已報價",s.quoted],["待上傳合約",s.contract],["已成交",s.dealt],["待公司下定",s.ready]];
+  if(el){ var sd=[["客戶已送出",s.submitted],["已報價",s.quoted],["待上傳合約",s.contract],["待出納確認訂金",s.awaiting],["已成交",s.dealt]];
     el.innerHTML=sd.map(function(x){return '<div class="bd-stat"><div class="n">'+x[1]+'</div><div class="l">'+x[0]+'</div></div>';}).join(""); }
   var q=((document.getElementById("bcSearch")||{}).value||"").trim().toLowerCase();
   var fk=(document.getElementById("bcStageFilter")||{}).value||"all";
@@ -2808,10 +2822,10 @@ function tryCashier(){
 function toggleCashier(id){const r=(SESSION.records||[]).find(x=>x.id===id);if(!r)return;r.paid=!r.paid;saveSession();refreshRecViews();fbUpdateRecord(id,{paid:r.paid});}
 function renderCashier(){
   const p=document.getElementById("cashierPanel");
-  const all=(SESSION.records||[]).filter(r=>r.confirmed);
+  const all=(SESSION.records||[]).filter(r=> r.hasContract || r.confirmed);
   const deals=all.filter(r=>inPeriod(r,cashierFilter));
   let recvAll=0,recvPaid=0,payAll=0;
-  deals.forEach(r=>{const rv=(r.deal!=null&&r.deal>0)?r.deal:r.total;recvAll+=rv;if(r.paid)recvPaid+=rv;payAll+=(r.totalCost||0);});
+  deals.forEach(r=>{ if(!r.confirmed) return; const rv=(r.deal!=null&&r.deal>0)?r.deal:r.total;recvAll+=rv;if(r.paid)recvPaid+=rv;payAll+=(r.totalCost||0);});
   const recvDue=recvAll-recvPaid;
   const tableDeals=deals.filter(r=>cashierPayFilter==="all"||(cashierPayFilter==="paid"?r.paid:!r.paid));
   const rows=tableDeals.length?tableDeals.map(r=>{
@@ -2822,7 +2836,7 @@ function renderCashier(){
       <td>${esc(r.cust.name)}${r.cust.car&&r.cust.car!=="—"?`・${esc(r.cust.car)}`:""}${r.cust.vin?`<br><span style="color:var(--ink-soft);font-size:12px">車身碼 ${esc(r.cust.vin)}</span>`:""}</td>
       <td class="num">NT$${fmt(rv)}</td>
       <td class="num">NT$${fmt(r.totalCost)}</td>
-      <td style="text-align:center;white-space:nowrap"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:3px">NT$${fmt(depositAmt(rv))}</div><button class="abtn" style="${r.depositPaid?'background:#2f7d4f;color:#fff;border-color:#2f7d4f':''}" onclick="toggleDepositPaid('${r.id}')">${r.depositPaid?'✓ 訂金已收':'訂金未收'}</button></td>
+      <td style="text-align:center;white-space:nowrap"><div style="font-size:12px;color:var(--ink-soft);margin-bottom:3px">NT$${fmt(depositAmt(rv))}</div><button class="abtn" style="${r.confirmed?'background:#2f7d4f;color:#fff;border-color:#2f7d4f':'background:#fdecea;color:#c0392b;border-color:#e0b4b4;font-weight:800'}" onclick="toggleDepositPaid('${r.id}')">${r.confirmed?'✓ 訂金已收（成交）':'確認訂金→成交'}</button></td>
       <td style="text-align:center"><button class="abtn" style="${r.paid?'background:#2f7d4f;color:#fff;border-color:#2f7d4f':''}" onclick="toggleCashier('${r.id}')">${r.paid?'已收款':'未收款'}</button></td>
       <td style="text-align:center"><div style="display:flex;flex-direction:column;gap:4px"><button class="abtn rec-print" onclick="reprintRecord('${r.id}')">📄 報價單</button><button class="abtn rec-print" onclick="printContractDoc('${r.id}')">📄 合約書</button></div></td>
     </tr>`;
@@ -2845,7 +2859,7 @@ function renderCashier(){
       <div class="acct-card"><div class="ac-lbl">未收</div><div class="ac-val" style="color:#b23b2e">NT$${fmt(recvDue)}</div></div>
       <div class="acct-card"><div class="ac-lbl">應付供應商</div><div class="ac-val">NT$${fmt(payAll)}</div></div>
     </div>
-    <p style="font-size:13px;color:var(--ink-soft);margin:12px 0 4px">應收以「成交價」為準（未填則以報價）。「訂金」欄顯示應收訂金金額，點一下可切換「訂金已收／未收」；「收款」欄切換全額收款狀態。兩者都會同步到業務端與管理後台。</p>
+    <p style="font-size:13px;color:var(--ink-soft);margin:12px 0 4px">紅色「確認訂金→成交」＝業務已上傳簽名合約、等你確認訂金；<b>你按下去這筆才正式成交</b>（會進成交數字、業務端也才顯示已成交）。「收款」欄＝全額收款狀態。都會同步到業務端與管理後台。</p>
     <table class="rec-table"><thead><tr><th>日期</th><th>業務</th><th>客戶</th><th class="num">應收</th><th class="num">應付</th><th style="text-align:center">訂金</th><th style="text-align:center">收款</th><th style="text-align:center">列印</th></tr></thead>
     <tbody>${rows}</tbody></table>`;
 }
@@ -3169,9 +3183,7 @@ function recordQuote(name,car){
 function setRecordDeal(id,v){
   const r=(SESSION.records||[]).find(x=>x.id===id);if(!r)return;
   r.deal=(v===""||v==null)?null:Math.max(0,Math.round(parseFloat(v)||0));
-  var patch={deal:r.deal};
-  if(r.deal!=null && r.deal>0 && !r.confirmed){ r.confirmed=true; patch.confirmed=true; toast("已自動標記為成交"); }  // 填成交價＝自動成交
-  saveSession();refreshRecViews();fbUpdateRecord(id,patch);
+  saveSession();refreshRecViews();fbUpdateRecord(id,{deal:r.deal});
 }
 function toggleConfirm(id){
   const r=(SESSION.records||[]).find(x=>x.id===id);if(!r)return;
@@ -3258,7 +3270,7 @@ function recordsHTML(){
             <span class="rec-time">${fmtTs(r.ts)}</span>
           </div>
           <div class="rec-fig">
-            <span style="font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;${r.confirmed?'background:#e6f4ea;color:#2f7d4f':'background:#f0efe9;color:#8a8a80'}">${r.confirmed?'已成交':'未成交'}</span>
+            ${_recStageBadge(r)}
             <span class="rec-cnt">${r.items.length} 項</span>
             <span class="rec-total">報價 NT$${fmt(r.total)}</span>
             ${r.deal!=null?`<span class="rec-total" style="color:#2f7d4f">成交 NT$${fmt(r.deal)}</span>`:`<span class="rec-total" style="color:var(--ink-soft)">成交 未填</span>`}
