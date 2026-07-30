@@ -1952,7 +1952,8 @@ function openCustomerFromHandoff(h){
     pickCustomer();   // 開客戶資料視窗 + 帶入可選車型
     window._handoff={pin:(h.pass||"").trim().toLowerCase(), rep:h.rep||null};
     // 入口頁已填過姓名+密碼 → 這裡把這兩欄藏起來，客戶只要選車型
-    var nm=document.getElementById("ciName"); if(nm){ nm.value=(h.name||"").trim(); nm.style.display="none"; if(nm.previousElementSibling)nm.previousElementSibling.style.display="none"; }
+    /* 入口頁真的有帶名字才把姓名欄藏起來；名字是空的就讓客戶自己填，避免送出空白名字。 */
+    var nm=document.getElementById("ciName"); if(nm){ nm.value=(h.name||"").trim(); if(nm.value){ nm.style.display="none"; if(nm.previousElementSibling)nm.previousElementSibling.style.display="none"; } }
     var pin=document.getElementById("ciPin"); if(pin){ pin.value=(h.pass||"").trim(); pin.style.display="none"; if(pin.previousElementSibling)pin.previousElementSibling.style.display="none"; }
     var modal=document.getElementById("custInfoModal");
     if(modal){
@@ -1969,6 +1970,14 @@ function submitCustomer(){
   const co=document.getElementById("cOther"),cnt=document.getElementById("cNote");
   const other=(co?co.value:"").trim(),note=(cnt?cnt.value:"").trim();
   if(!ids.length&&!other&&!note){alert("您還沒有選任何項目喔");return;}
+  /* 名字空白就不能送單：沒稱呼的話當場問一次（VIP 入口帶入名字是空的也會被這裡擋下來補填）。 */
+  if(!((custInfo.name||"").trim())){
+    var nm2=prompt("請輸入您的稱呼（讓業務知道您是哪位）","");
+    if(nm2==null)return;
+    nm2=String(nm2).trim();
+    if(!nm2){alert("請填寫您的稱呼再送出喔");return;}
+    custInfo.name=nm2;
+  }
   if(!_bizGuard("submitCustomer",2500))return;
   const items=ids.map(id=>{const f=findItem(id);const it=f?f.item:{};return {i:id,q:quote[id].qty,n:it.name||"",mo:it.model||""};});
   const sub={id:"S"+Date.now()+"_"+Math.random().toString(36).slice(2,5),ts:Date.now(),rep:custInfo.rep,name:custInfo.name,car:custInfo.car,items:items,other:other,note:note};
@@ -1976,11 +1985,12 @@ function submitCustomer(){
   lastLocalSubId=sub.id;
   saveSession();fbSaveSubmission(sub);
   try{sendEmailNotify(sub);}catch(_){}
+  /* 先跳「已送出」訊息、再收拾畫面：以前是先把畫面切回員工內部頁才跳訊息，訊息背後會閃過內部畫面（客戶看到會抖一下）。 */
+  alert("已送出，感謝您！業務 "+custInfo.rep+" 很快會與您聯繫。");
   document.body.classList.remove("custmode");
   currentRep=SESSION.rep||SALES[0];quote=SESSION.quotes[currentRep]||{};
   ["cName","cCar","cOther","cNote"].forEach(id=>{const e=document.getElementById(id);if(e)e.value="";});
   updateInboxBtn();
-  alert("已送出，感謝您！業務 "+custInfo.rep+" 很快會與您聯繫。");
   if(typeof autoLogoutNow==="function") autoLogoutNow(); else showEntryGate();   // 客戶送出後自動登出（VIP 回入口頁）
 }
 /* ---------- 客戶送單匣（業務端） ---------- */
@@ -2105,13 +2115,17 @@ function importSubmission(id){
   const cca=document.getElementById("cCar");if(cca)cca.value=s.car||"";if(SESSION.cust[currentRep])SESSION.cust[currentRep].car=s.car||"";
   if(s.other){const o=document.getElementById("cOther");if(o)o.value=s.other;if(SESSION.cust[currentRep])SESSION.cust[currentRep].other=s.other;}
   if(s.note){const n=document.getElementById("cNote");if(n)n.value=s.note;if(SESSION.cust[currentRep])SESSION.cust[currentRep].note=s.note;}
+  /* 清掉上一位客戶殘留的車身碼，避免掛到這筆新匯入的單子上 */
+  const cv=document.getElementById("cVin");if(cv)cv.value="";if(SESSION.cust[currentRep])SESSION.cust[currentRep].vin="";
   const cleared=Object.keys(quote).length;
   for(const k in quote)delete quote[k];
   let added=0,skipped=0;
   (s.items||[]).forEach(o=>{if(!o||o.i==null)return;let f=findItem(o.i);if(!f&&o.n)f=findItemByNM(o.n,o.mo);if(!f){skipped++;return;}const priced=retail(f.item)!=null;quote[f.item.id]={qty:Math.max(1,parseInt(o.q)||1),manual:priced?null:""};added++;});
   SESSION.inbox=(SESSION.inbox||[]).filter(x=>x.id!==id);
-  saveSession();fbDeleteSubmission(id);renderReps();renderCatalog();renderQuote();toggleQuote(true);closeInbox();updateInboxBtn();
-  alert("已匯入客戶送單："+added+" 項"+(cleared?("（已自動清除原本的 "+cleared+" 項）"):"")+(skipped?("；有 "+skipped+" 項找不到，已略過"):""));
+  /* 匯入後自動存成一筆「已報價」紀錄：案件卡片不再憑空消失，直接從「客戶已送出」變成「已報價」。 */
+  if(added>0){editingRecordId=null;recordQuote(s.name||"—",s.car||"—");}
+  saveSession();fbDeleteSubmission(id);renderReps();renderCatalog();renderQuote();toggleQuote(true);closeInbox();updateInboxBtn();refreshRecViews();
+  alert("已匯入客戶送單："+added+" 項"+(added?"，並已自動存成「已報價」（客戶案件列表看得到）":"")+(cleared?("（已自動清除原本的 "+cleared+" 項）"):"")+(skipped?("；有 "+skipped+" 項找不到，已略過"):""));
 }
 function customerCode(){
   const arr=Object.keys(quote).map(id=>({i:id,q:quote[id].qty}));
@@ -2679,15 +2693,19 @@ function renderPrintDoc(o){
 function printNow(){
   var pd=document.getElementById("printDoc");
   var inner=pd?pd.innerHTML:"";
-  var isMobile=/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent||"")||(window.matchMedia&&window.matchMedia("(max-width:960px)").matches);
+  /* 只有「真的手機／平板」才走開新分頁；電腦不管視窗多窄、字放多大，一律直接跳列印視窗（修正：以前視窗寬度≤960px 的電腦會被誤判成手機，開出空白新分頁）。 */
+  var _ua=navigator.userAgent||"";
+  var isMobile=/Mobi|Android|iPhone|iPad|iPod/i.test(_ua)||(/Macintosh/i.test(_ua)&&navigator.maxTouchPoints>1);
   if(isMobile&&inner){
     var css="";document.querySelectorAll("style").forEach(function(s){css+=(s.textContent||"");});
     var w=window.open("","_blank");
-    if(!w){alert("請允許此網站開啟新分頁（彈出視窗），才能列印或存成 PDF。");return;}
-    w.document.open();
-    w.document.write('<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>歐馬 · 列印 / 存 PDF</title><style>'+css+'</style><style>html,body{margin:0;background:#eee}#printDoc{display:block!important;background:#fff;margin:0 auto;padding:14px;overflow-x:auto}#pbar{position:sticky;top:0;z-index:9;display:flex;gap:8px;padding:10px 12px;background:#171717}#pbar button{flex:1;padding:13px;border:0;border-radius:10px;font-size:16px;font-weight:800}#pbar .go{background:#c9922b;color:#fff}#pbar .cl{background:#555;color:#fff}@media print{#pbar{display:none!important}html,body{background:#fff}}</style></head><body><div id="pbar"><button class="go" onclick="window.print()">列印 / 存成 PDF</button><button class="cl" onclick="window.close()">關閉</button></div><div id="printDoc">'+inner+'</div></body></html>');
-    w.document.close();
-    return;
+    if(w){
+      w.document.open();
+      w.document.write('<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>歐馬 · 列印 / 存 PDF</title><style>'+css+'</style><style>html,body{margin:0;background:#eee}#printDoc{display:block!important;background:#fff;margin:0 auto;padding:14px;overflow-x:auto}#pbar{position:sticky;top:0;z-index:9;display:flex;gap:8px;padding:10px 12px;background:#171717}#pbar button{flex:1;padding:13px;border:0;border-radius:10px;font-size:16px;font-weight:800}#pbar .go{background:#c9922b;color:#fff}#pbar .cl{background:#555;color:#fff}@media print{#pbar{display:none!important}html,body{background:#fff}}</style></head><body><div id="pbar"><button class="go" onclick="window.print()">列印 / 存成 PDF</button><button class="cl" onclick="window.close()">關閉</button></div><div id="printDoc">'+inner+'</div></body></html>');
+      w.document.close();
+      return;
+    }
+    /* 新分頁被瀏覽器擋住 → 不再只跳警告，改為自動退回「頁內列印」，至少一定印得出來。 */
   }
   // 桌機：頁內列印。只有這裡（程式列印）才加 app-printing → 只印 #printDoc；使用者自己 Cmd+P／右鍵列印不會加，印的是正常頁面。
   var _body=document.body, _clr=function(){_body.classList.remove("app-printing");};
