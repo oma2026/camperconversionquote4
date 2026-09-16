@@ -10,6 +10,10 @@
   import {
     getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, arrayUnion, arrayRemove
   } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
+  import {
+    getAuth, onAuthStateChanged, signInWithEmailAndPassword, signInAnonymously, signOut,
+    updatePassword, reauthenticateWithCredential, EmailAuthProvider
+  } from "https://www.gstatic.com/firebasejs/12.15.0/firebase-auth.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyA5VM_w5h7-IqHbHMNkSYsqpHweeicu30s",
@@ -35,7 +39,30 @@
     window.firebaseOnSnapshot = onSnapshot;
     window.firebaseArrayUnion = arrayUnion;
     window.firebaseArrayRemove = arrayRemove;
-    window.dispatchEvent(new Event("firebase-ready"));
+
+    /* ===== 雲端登入驗證（Firebase Auth）=====
+       員工＝電子郵件/密碼帳號（伺服器驗證）；客戶＝匿名通行證。
+       頁面載入時：已有員工登入就沿用，否則先取匿名通行證，拿到後才開始同步資料。 */
+    const auth = getAuth(app);
+    window.fbAuth = auth;
+    window.fbApiKey = firebaseConfig.apiKey;
+    window.fbStaffLogin = (email, pw) => signInWithEmailAndPassword(auth, email, pw);
+    window.fbSignOutStaff = () => { try { return signOut(auth).catch(()=>{}); } catch(e){} };
+    window.fbChangePassword = async (oldPw, newPw) => {
+      const u = auth.currentUser;
+      if (!u || !u.email) throw new Error("not-staff");
+      await reauthenticateWithCredential(u, EmailAuthProvider.credential(u.email, oldPw));
+      await updatePassword(u, newPw);
+    };
+    let fbReadyFired = false;
+    const fireReady = () => { if (!fbReadyFired) { fbReadyFired = true; window.dispatchEvent(new Event("firebase-ready")); } };
+    onAuthStateChanged(auth, (user) => {
+      window.fbUser = user || null;
+      window.fbIsStaff = !!(user && user.email);
+      if (!user) { signInAnonymously(auth).catch((e)=>{ console.warn("匿名通行證取得失敗（可能離線）：", e); fireReady(); }); return; }
+      fireReady();
+    });
+    setTimeout(fireReady, 6000);   /* 保險絲：驗證卡住也讓 App 起來（走本機資料） */
   } catch(e) { console.warn("Firebase 初始化失敗，改用本機資料：", e); }
 </script>
 <style>
@@ -575,6 +602,16 @@ body.custmode .cust-exit{display:inline-flex!important}
 .case-mi{display:block;width:100%;text-align:left;border:none;background:none;padding:9px 12px;font-size:14px;border-radius:7px;cursor:pointer;color:var(--ink)}
 .case-mi:hover{background:var(--paper-2)}
 .case-mi.danger{color:var(--bad)}
+/* ---- 流程重整第一期（2026-09-04）：案件卡進度條＋單一主按鈕 ---- */
+.case-steps{display:flex;gap:4px;margin:10px 0 2px}
+.case-step{flex:1;text-align:center;font-size:11px;font-weight:700;color:var(--ink-soft);padding-top:5px;border-top:3px solid var(--line-2)}
+.case-step.done{border-top-color:var(--good);color:var(--good)}
+.case-step.now{border-top-color:#b1802a;color:#8a5e1f;font-weight:900}
+.cbtn-primary{display:block;width:100%;border:none;border-radius:10px;background:#b1802a;color:#fff;font-weight:900;font-size:15.5px;padding:12px 0;text-align:center;cursor:pointer;margin-top:8px;box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.cbtn-primary:hover{background:#8a5e1f}
+.case-wait{display:block;width:100%;border-radius:10px;background:var(--paper-2);border:1px dashed var(--line-2);color:#a86a12;font-weight:800;font-size:14px;padding:11px 0;text-align:center;margin-top:8px}
+.case-subrow{display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:10px;flex-wrap:wrap}
+.case-note{font-size:12.5px;color:var(--ink-soft)}
 </style>
 </head>
 <body>
@@ -1618,17 +1655,31 @@ function _recStageBadge(r){
   return '<span style="font-size:12px;font-weight:800;padding:2px 9px;border-radius:999px;'+c+'">'+lbl+'</span>';
 }
 function caseMoreCamper(it){
+  /* 流程重整第一期：所有次要動作一律收在這個「⋯ 其他」選單，卡片上只留一顆主按鈕 */
   var m=[];
   if(it.type==='rec'){
-    m.push('<button class="case-mi" onclick="editRecord(\''+it.id+'\')">查看 / 修改</button>');
-    if(it._raw.hasContract)m.push('<button class="case-mi" onclick="viewContract(\''+it.id+'\')">檢視客戶簽名合約</button>');
-    if(it._raw.ordered)m.push('<button class="case-mi" onclick="caseMarkOrdered(\''+it.id+'\')">↩ 取消公司下定</button>');
-    else if(it._raw.confirmed)m.push('<button class="case-mi" onclick="caseMarkOrdered(\''+it.id+'\')">✓ 標記公司已下定</button>');
-    m.push('<button class="case-mi danger" onclick="deleteRecord(\''+it.id+'\')">刪除案件</button>');
+    var r=it._raw;
+    m.push('<button class="case-mi" onclick="editRecord(\''+it.id+'\')">✏️ 查看 / 修改報價</button>');
+    m.push('<button class="case-mi" onclick="reprintRecord(\''+it.id+'\')">🖨 列印報價單</button>');
+    if(r.contractGenerated)m.push('<button class="case-mi" onclick="caseGenContract(\''+it.id+'\')">🖨 再印一次合約書</button>');
+    if(r.hasContract)m.push('<button class="case-mi" onclick="viewContract(\''+it.id+'\')">📄 檢視客戶簽名合約</button>');
+    if(r.hasContract)m.push('<label class="case-mi" style="cursor:pointer">📎 重新上傳簽名合約<input type="file" accept="application/pdf,image/*" style="display:none" onchange="caseUploadSigned(\''+it.id+'\',this)"></label>');
+    if(r.ordered)m.push('<button class="case-mi" onclick="caseMarkOrdered(\''+it.id+'\')">↩ 取消公司下定</button>');
+    m.push('<button class="case-mi danger" onclick="deleteRecord(\''+it.id+'\')">🗑 刪除案件（救不回來）</button>');
   }else{
-    m.push('<button class="case-mi danger" onclick="deleteSubmission(\''+it.id+'\')">刪除送單</button>');
+    m.push('<button class="case-mi danger" onclick="deleteSubmission(\''+it.id+'\')">🗑 刪除送單（救不回來）</button>');
   }
-  return '<details class="case-more"><summary>更多操作 ▾</summary><div class="case-menu">'+m.join('')+'</div></details>';
+  return '<details class="case-more"><summary>⋯ 其他</summary><div class="case-menu">'+m.join('')+'</div></details>';
+}
+function caseStepsCamper(k){
+  /* 五格進度：報價 → 合約 → 訂金 → 成交 → 完成。done=已完成格數、now=目前格 */
+  var labels=['報價','合約','訂金','成交','完成'];
+  var st=({submitted:{done:0,now:0},quoted:{done:1,now:1},contract:{done:1,now:1},
+           awaiting:{done:2,now:2},dealt:{done:4,now:4},ordered:{done:5,now:-1}})[k]||{done:0,now:0};
+  return '<div class="case-steps">'+labels.map(function(t,i){
+    var cls=i<st.done?'done':(i===st.now?'now':'');
+    return '<div class="case-step '+cls+'">'+t+'</div>';
+  }).join('')+'</div>';
 }
 function caseCardCamper(it){
   var k=caseStageCamper(it);
@@ -1636,28 +1687,40 @@ function caseCardCamper(it){
   var inner='',money='';
   if(it.type==='sub'){
     var s=it._raw; money=(s.items?s.items.length:0)+' 項'+(s.other?' · 有其他需求':'');
-    inner='<div class="case-actrow"><button class="cbtn dark" onclick="importSubmission(\''+it.id+'\')">📥 匯入到報價單</button>'+caseMoreCamper(it)+'</div>';
+    inner='<button class="cbtn-primary" onclick="importSubmission(\''+it.id+'\')">📥 匯入到報價單，開始報價</button>'
+      +'<div class="case-subrow"><span class="case-note">匯入後會自動存成一筆「已報價」，就在這個列表</span>'+caseMoreCamper(it)+'</div>';
   }else{
     var r=it._raw,conf=!!r.confirmed,base=(r.deal!=null&&r.deal>0)?r.deal:r.total;
     var gen=!!r.contractGenerated,signed=!!r.hasContract;
-    money='報價 NT$'+fmt(r.total)+((conf&&r.deal)?(' · 成交 NT$'+fmt(r.deal)):'');
-    var uplBtn=gen
-      ?'<label class="cbtn dark" style="cursor:pointer">📎 '+(signed?'重新上傳簽名合約':'上傳客戶已簽名合約')+'<input type="file" accept="application/pdf,image/*" style="display:none" onchange="caseUploadSigned(\''+it.id+'\',this)"></label>'
-      :'<button class="cbtn dis" disabled>📎 上傳客戶已簽名合約</button>';
-    var depStatus=conf
-      ?'<span style="color:var(--good);font-weight:800">✓ 出納已確認訂金（已成交）</span>'
-      :(signed?'<span style="color:#a86a12;font-weight:800">⏳ 待出納確認訂金</span>':'<span style="color:var(--ink-soft)">訂金：上傳簽名合約後由出納確認</span>');
-    inner='<div class="case-deal"><span>成交價 NT$</span><input type="number" min="0" value="'+(r.deal==null?'':r.deal)+'" placeholder="輸入成交價" onchange="setRecordDeal(\''+it.id+'\',this.value)"></div>'
-      +'<div class="case-dep">訂金（'+depositPctVal()+'%）：<b style="color:var(--rust)">NT$'+fmt(depositAmt(base))+'</b> · 尾款：<b>NT$'+fmt(balanceAmt(base))+'</b>　·　'+depStatus+'</div>'
-      +'<div class="case-actrow">'
-      +'<button class="cbtn" onclick="reprintRecord(\''+it.id+'\')">📄 下載報價單</button>'
-      +'<button class="cbtn dark" onclick="caseGenContract(\''+it.id+'\')">📄 '+(gen?'下載':'產生')+'簽約文件</button>'
-      +uplBtn
-      +caseMoreCamper(it)+'</div>'
-      +((gen&&!signed)?'<div style="margin-top:8px;color:var(--ink-soft);font-size:12.5px">客戶簽名後，上傳「已簽名合約」→ 自動通知出納確認訂金 → 出納確認後才算成交。</div>':'')
-      +((signed&&!conf)?'<div style="margin-top:8px;color:#a86a12;font-size:12.5px">✅ 已通知出納。等出納在「出納」頁確認「訂金已收」後，這筆才算成交。</div>':'');
+    money='報價 NT$'+fmt(r.total)+((r.deal!=null&&r.deal>0)?(' · 成交 NT$'+fmt(r.deal)):'')
+      +' · 訂金（'+depositPctVal()+'%）<b style="color:var(--rust)">NT$'+fmt(depositAmt(base))+'</b>';
+    /* 成交價還沒定案（尚未簽回）才顯示輸入框 */
+    var dealRow=(!signed&&!conf)
+      ?'<div class="case-deal"><span>成交價 NT$</span><input type="number" min="0" value="'+(r.deal==null?'':r.deal)+'" placeholder="談定後填（沒填＝用報價金額）" onchange="setRecordDeal(\''+it.id+'\',this.value)"></div>'
+      :'';
+    var primary='',note='';
+    if(!gen){                       /* 已報價 → 下一步：印合約 */
+      primary='<button class="cbtn-primary" onclick="caseGenContract(\''+it.id+'\')">📄 印合約書給客戶簽</button>';
+      note='合約金額會用上面的成交價（沒填就用報價金額）';
+    }else if(!signed){              /* 合約已印 → 下一步：上傳簽回 */
+      primary='<label class="cbtn-primary" style="cursor:pointer">📎 上傳客戶已簽名合約<input type="file" accept="application/pdf,image/*" style="display:none" onchange="caseUploadSigned(\''+it.id+'\',this)"></label>';
+      note='上傳後系統會自動通知出納確認訂金';
+    }else if(!conf){                /* 已簽回 → 等出納，業務不用做事 */
+      primary='<span class="case-wait">⏳ 已通知出納，確認「訂金已收」後這筆就算成交</span>';
+      note='';
+    }else if(!r.ordered){           /* 已成交 → 下一步：公司下定 */
+      primary='<button class="cbtn-primary" onclick="caseMarkOrdered(\''+it.id+'\')">✓ 標記公司已下定（已向供應商下單）</button>';
+      note='✓ 出納已確認訂金，這筆已正式成交';
+    }else{                          /* 已下定 → 全部完成 */
+      primary='<span class="case-wait" style="color:var(--good);border-color:var(--good)">✓ 已下定，全部完成</span>';
+      note='';
+    }
+    inner=dealRow+primary
+      +'<div class="case-subrow"><span class="case-note">'+note+'</span>'+caseMoreCamper(it)+'</div>';
   }
-  return '<div class="case-card"><div class="cc-top"><div><div class="cc-cust">'+esc(it.cust)+'</div><div class="cc-sub">'+sub+'</div></div><span class="case-badge '+caseBadgeClsCamper(k)+'">'+caseStageLabelCamper(k)+'</span></div>'+(money?'<div class="case-money">'+money+'</div>':'')+inner+'</div>';
+  return '<div class="case-card"><div class="cc-top"><div><div class="cc-cust">'+esc(it.cust)+'</div><div class="cc-sub">'+sub+'</div></div><span class="case-badge '+caseBadgeClsCamper(k)+'">'+caseStageLabelCamper(k)+'</span></div>'
+    +caseStepsCamper(k)
+    +(money?'<div class="case-money">'+money+'</div>':'')+inner+'</div>';
 }
 function caseGenContract(recordId){
   var r=(SESSION.records||[]).find(function(x){return x.id===recordId;}); if(!r)return;
@@ -1734,11 +1797,60 @@ function routeToRole(){
   else if(role==="cashier")setMode("cashier");
   else { setMode("biz"); showBizDash(); }
 }
+/* ===== 雲端登入輔助（Firebase Auth）=====
+   員工身分 → 對應一個 Firebase 帳號 email；密碼在伺服器核對，前端不再存真正的密碼。 */
+const STAFF_EMAIL_DOMAIN="quote.o-ma.com.tw";
+function _staffSlug(k){return String(k||"").toLowerCase().replace(/[^a-z0-9._-]/g,"");}
+function staffEmailForRep(k){
+  if(k==="業務共用") return "shared@"+STAFF_EMAIL_DOMAIN;
+  const r=((DB.sales&&DB.sales.list)||[]).find(x=>x.key===k);
+  if(r&&r.authEmail) return String(r.authEmail).toLowerCase();
+  if(r&&/^\S+@\S+\.\S+$/.test(r.email||"")) return String(r.email).toLowerCase();
+  const s=_staffSlug(k); return (s||"rep")+"@"+STAFF_EMAIL_DOMAIN;
+}
+function staffEmailForRole(role){ return role+"@"+STAFF_EMAIL_DOMAIN; }
+function fbLoginErrText(e){
+  const c=(e&&e.code)||"";
+  if(c.indexOf("invalid-credential")>=0||c.indexOf("wrong-password")>=0||c.indexOf("user-not-found")>=0||c.indexOf("invalid-email")>=0) return "帳號或密碼錯誤";
+  if(c.indexOf("too-many-requests")>=0) return "嘗試次數過多，請稍後再試";
+  if(c.indexOf("network")>=0) return "連不上驗證伺服器，請檢查網路";
+  return "登入失敗："+(c||(e&&e.message)||"未知錯誤");
+}
+/* 建立員工帳號（走 REST，不會把目前登入的人踢掉）＋把 email 加入雲端白名單 acl/staff */
+function fbCreateStaff(email,pw){
+  return fetch("https://identitytoolkit.googleapis.com/v1/accounts:signUp?key="+(window.fbApiKey||""),{
+    method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({email:email,password:pw,returnSecureToken:false})
+  }).then(r=>r.json()).then(function(d){
+    if(d&&d.error&&d.error.message!=="EMAIL_EXISTS") throw new Error(d.error.message);
+    if(window.firebaseSetDoc&&window.firebaseDB){
+      return window.firebaseSetDoc(window.firebaseDoc(window.firebaseDB,"acl","staff"),{emails:window.firebaseArrayUnion(email)},{merge:true}).catch(function(){});
+    }
+  });
+}
+function fbRemoveStaffFromAcl(email){
+  if(email&&window.firebaseUpdateDoc&&window.firebaseDB) window.firebaseUpdateDoc(window.firebaseDoc(window.firebaseDB,"acl","staff"),{emails:window.firebaseArrayRemove(email)}).catch(function(){});
+}
 function tryLogin(){
   const v=document.getElementById("loginSel").value;
   const pw=(document.getElementById("bizPw").value||"").trim();
   const err=document.getElementById("bizErr");
   if(!v){err.textContent="請先選擇身分";return;}
+  if(!pw){err.textContent="請輸入密碼";return;}
+  if(window.fbAuth){
+    /* 正式作法：密碼由 Firebase 伺服器核對；成功後重新載入頁面，讓資料同步以員工權限重新連線 */
+    const email=v.startsWith("rep:")?staffEmailForRep(v.slice(4)):staffEmailForRole(v.slice(5));
+    err.textContent="驗證中…";
+    window.fbStaffLogin(email,pw).then(()=>{
+      if(v.startsWith("rep:")){const r=v.slice(4);SESSION.role="biz";SESSION.bizRep=r;SESSION.rep=r;}
+      else{SESSION.role=v.slice(5);}
+      try{localStorage.setItem(SESS_KEY,JSON.stringify(SESSION));}catch(e){}
+      err.textContent="登入成功，載入中…";
+      setTimeout(()=>location.reload(),80);
+    }).catch((e)=>{ err.textContent=fbLoginErrText(e); });
+    return;
+  }
+  /* 離線備援：Firebase 起不來（無網路等）時退回舊的本機密碼比對 */
   if(v.startsWith("rep:")){
     const r=v.slice(4);
     if(pw===(DB.repPins&&DB.repPins[r])){
@@ -1771,6 +1883,7 @@ function stopAutoLogout(){ _autoOn=false; clearTimeout(_idleTimer); clearTimeout
 ["mousemove","mousedown","keydown","touchstart","scroll","click"].forEach(function(ev){ try{ document.addEventListener(ev,_resetIdle,true); }catch(e){} });
 function logout(){
   stopAutoLogout();
+  if(window.fbSignOutStaff)window.fbSignOutStaff();   /* 雲端員工登入一併退出（會自動換回匿名通行證） */
   SESSION.role=null;SESSION.bizRep=null;saveSession();
   document.body.classList.remove("custmode");closeDeals();
   applyRole();updateBizPill();updateTopLogout();
@@ -1796,6 +1909,23 @@ function updateTopLogout(){
   b.style.display=show?"":"none";
   b.textContent="⏻ 登出";
   if((inCust || (SESSION&&SESSION.role)) && typeof startAutoLogout==="function") startAutoLogout();   // 有登入/客戶模式 → 啟動自動登出計時
+  updateModeBar();
+}
+/* 流程重整第一期：上方部門列只顯示「自己用得到」的按鈕。
+   老闆（admin）看全部；業務只看業務端（只剩一顆＝整列藏起來）；採購/會計/技術/出納各看自己那顆；客戶模式整列不顯示。 */
+function updateModeBar(){
+  var mw=document.querySelector(".modewrap");if(!mw)return;
+  var role=(SESSION&&SESSION.role)||"";
+  if(document.body.classList.contains("custmode")){mw.style.display="none";return;}
+  var show={mBiz:true,mAdmin:false,mBuyer:false,mAcct:false,mTech:false,mCashier:false};
+  if(role==="admin"){show.mAdmin=show.mBuyer=show.mAcct=show.mTech=show.mCashier=true;}
+  else if(role==="buyer"){show={mBiz:false,mAdmin:false,mBuyer:true,mAcct:false,mTech:false,mCashier:false};}
+  else if(role==="acct"){show={mBiz:false,mAdmin:false,mBuyer:false,mAcct:true,mTech:false,mCashier:false};}
+  else if(role==="tech"){show={mBiz:false,mAdmin:false,mBuyer:false,mAcct:false,mTech:true,mCashier:false};}
+  else if(role==="cashier"){show={mBiz:false,mAdmin:false,mBuyer:false,mAcct:false,mTech:false,mCashier:true};}
+  var visible=0;
+  for(var id in show){var btn=document.getElementById(id);if(btn)btn.style.display=show[id]?"":"none";if(show[id])visible++;}
+  mw.style.display=(visible<=1)?"none":"";   // 只剩一顆按鈕＝沒得選，整列藏起來畫面更乾淨
 }
 function bizNav(){
   if(curMode==="biz"&&(SESSION&&SESSION.role==="biz")){openLogin();return;}
@@ -1803,6 +1933,16 @@ function bizNav(){
   setMode("biz");
 }
 function changeMyPin(){
+  if(window.fbAuth&&window.fbIsStaff){   /* 雲端版：改的是 Firebase 帳號密碼（只能改自己這個登入身分的） */
+    const cur=prompt("請先輸入目前密碼：");if(cur==null)return;
+    const np=prompt(`設定 ${currentRep} 的新密碼（至少 6 碼）：`);if(np==null)return;
+    const v=np.trim();if(v.length<6){alert("新密碼至少要 6 碼");return;}
+    window.fbChangePassword(cur,v).then(()=>toast("密碼已更新")).catch((e)=>{
+      const c=(e&&e.code)||"";
+      alert(c.indexOf("invalid-credential")>=0||c.indexOf("wrong-password")>=0?"目前密碼錯誤":"更新失敗，請檢查網路後再試");
+    });
+    return;
+  }
   const cur=prompt("請先輸入目前密碼：");if(cur==null)return;
   if(cur!==(DB.repPins&&DB.repPins[currentRep])){alert("目前密碼錯誤");return;}
   const np=prompt(`設定 ${currentRep} 的新密碼：`);if(np==null)return;
@@ -1812,6 +1952,18 @@ function changeMyPin(){
   saveTeam();toast("密碼已更新");
 }
 function changeRolePin(role){
+  if(window.fbAuth&&window.fbIsStaff){   /* 雲端版：只能改「目前登入身分」自己的密碼 */
+    const myEmail=(window.fbUser&&window.fbUser.email||"").toLowerCase();
+    if(myEmail!==staffEmailForRole(role)){alert("請先用該身分登入，再從這裡改它的密碼。\n（忘記密碼時請找 darren 到 Firebase 後台重設）");return;}
+    const cur=prompt("請先輸入目前密碼：");if(cur==null)return;
+    const np=prompt("設定新密碼（至少 6 碼）：");if(np==null)return;
+    const v=np.trim();if(v.length<6){alert("新密碼至少要 6 碼");return;}
+    window.fbChangePassword(cur,v).then(()=>toast("密碼已更新")).catch((e)=>{
+      const c=(e&&e.code)||"";
+      alert(c.indexOf("invalid-credential")>=0||c.indexOf("wrong-password")>=0?"目前密碼錯誤":"更新失敗，請檢查網路後再試");
+    });
+    return;
+  }
   const key=role==="buyer"?"buyerPin":role==="tech"?"techPin":role==="acct"?"acctPin":role==="cashier"?"cashierPin":"adminPin";
   const cur=prompt("請先輸入目前密碼：");if(cur==null)return;
   if(cur!==DB[key]){alert("目前密碼錯誤");return;}
@@ -2105,7 +2257,7 @@ function renderInbox(){
     </div>`;}).join("");
 }
 function deleteSubmission(id){
-  if(!confirm("刪除這筆客戶送單？"))return;
+  if(!confirm("刪除這筆客戶送單？\n\n⚠️ 刪除後救不回來，客戶挑的品項清單會整筆消失。\n（如果只是要開始報價，請按「匯入到報價單」，不要刪除）"))return;
   SESSION.inbox=(SESSION.inbox||[]).filter(s=>s.id!==id);saveSession();fbDeleteSubmission(id);renderInbox();updateInboxBtn();
 }
 function importSubmission(id){
@@ -2819,26 +2971,25 @@ function reprintRecord(id){
   }).join("");
   renderPrintDoc({quoteNo,ds,name:r.cust.name,car:r.cust.car,vin:r.cust.vin,rep:r.rep,rowsHtml,grand,anyTBD});
 }
-function tryBuyer(){
-  const v=(document.getElementById("buyerPin").value||"").trim();
-  if(v===DB.buyerPin){buyerUnlocked=true;document.getElementById("buyerErr").textContent="";document.getElementById("buyerPin").value="";setMode("buyer");}
-  else document.getElementById("buyerErr").textContent="密碼錯誤";
+/* 部門快速解鎖：雲端版改用 Firebase 伺服器驗證該部門帳號的密碼 */
+function fbRoleUnlock(role,inputId,errId,legacyKey,onOk){
+  const v=(document.getElementById(inputId).value||"").trim();
+  const err=document.getElementById(errId);
+  if(window.fbAuth){
+    if(!v){err.textContent="請輸入密碼";return;}
+    err.textContent="驗證中…";
+    window.fbStaffLogin(staffEmailForRole(role),v).then(()=>{
+      err.textContent="";document.getElementById(inputId).value="";onOk();
+    }).catch((e)=>{err.textContent=fbLoginErrText(e);});
+    return;
+  }
+  if(v===DB[legacyKey]){err.textContent="";document.getElementById(inputId).value="";onOk();}
+  else err.textContent="密碼錯誤";
 }
-function tryAcct(){
-  const v=(document.getElementById("acctPin").value||"").trim();
-  if(v===DB.acctPin){acctUnlocked=true;document.getElementById("acctErr").textContent="";document.getElementById("acctPin").value="";setMode("acct");}
-  else document.getElementById("acctErr").textContent="密碼錯誤";
-}
-function tryTech(){
-  const v=(document.getElementById("techPin").value||"").trim();
-  if(v===DB.techPin){techUnlocked=true;document.getElementById("techErr").textContent="";document.getElementById("techPin").value="";setMode("tech");}
-  else document.getElementById("techErr").textContent="密碼錯誤";
-}
-function tryCashier(){
-  const v=(document.getElementById("cashierPin").value||"").trim();
-  if(v===DB.cashierPin){cashierUnlocked=true;document.getElementById("cashierErr").textContent="";document.getElementById("cashierPin").value="";setMode("cashier");}
-  else document.getElementById("cashierErr").textContent="密碼錯誤";
-}
+function tryBuyer(){ fbRoleUnlock("buyer","buyerPin","buyerErr","buyerPin",()=>{buyerUnlocked=true;setMode("buyer");}); }
+function tryAcct(){ fbRoleUnlock("acct","acctPin","acctErr","acctPin",()=>{acctUnlocked=true;setMode("acct");}); }
+function tryTech(){ fbRoleUnlock("tech","techPin","techErr","techPin",()=>{techUnlocked=true;setMode("tech");}); }
+function tryCashier(){ fbRoleUnlock("cashier","cashierPin","cashierErr","cashierPin",()=>{cashierUnlocked=true;setMode("cashier");}); }
 function toggleCashier(id){const r=(SESSION.records||[]).find(x=>x.id===id);if(!r)return;if(!confirm(r.paid?"取消「已收款」？":"確認這筆已「全額收款」完成？")) return;r.paid=!r.paid;saveSession();refreshRecViews();fbUpdateRecord(id,{paid:r.paid});}
 function renderCashier(){
   const p=document.getElementById("cashierPanel");
@@ -3240,14 +3391,11 @@ function resetData(){
 
 /* ---------- admin ---------- */
 function tryPin(){
-  const v=document.getElementById("pinIn").value;
-  if(v===DB.adminPin){unlocked=true;document.getElementById("pinErr").textContent="";
-    document.getElementById("pinIn").value="";setMode("admin");}
-  else{document.getElementById("pinErr").textContent="密碼錯誤";}
+  fbRoleUnlock("admin","pinIn","pinErr","adminPin",()=>{unlocked=true;setMode("admin");});
 }
 function fmtTs(ts){const d=new Date(ts);const p=n=>String(n).padStart(2,"0");
   return `${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;}
-function setRecFilter(v){adminRecFilter=v;renderAdmin();}function deleteRecord(id){if(!confirm("刪除這筆報價紀錄？"))return;
+function setRecFilter(v){adminRecFilter=v;renderAdmin();}function deleteRecord(id){if(!confirm("刪除這筆案件？\n\n⚠️ 刪除後救不回來，報價內容、成交價、合約狀態會整筆消失。"))return;
   SESSION.records=SESSION.records.filter(r=>r.id!==id);saveSession();refreshRecViews();fbDeleteRecord(id);}
 function clearRecords(){
   const scope=adminRecFilter==="全部"?"全部":adminRecFilter;
@@ -3321,7 +3469,7 @@ function recordsHTML(){
             <div style="margin-top:8px;font-size:13.5px;font-weight:800;${ready?'color:#2f7d4f':'color:var(--rust)'}">${ready?'✓ 訂金已付 → 可以跟國外下定':'⚑ 尚不可下定：需先「訂金已付」'}</div>
           </div>`:""}
           <button class="abtn" style="margin-right:8px;${r.confirmed?'':'background:#2f7d4f;color:#fff;border-color:#2f7d4f'}" onclick="toggleConfirm('${r.id}')">${r.confirmed?'↩ 取消成交':'✓ 標記為已成交'}</button>
-          <button class="abtn rec-print" style="margin-right:8px" onclick="reprintRecord('${r.id}')">重新列印報價單</button>
+          <button class="abtn rec-print" style="margin-right:8px" onclick="reprintRecord('${r.id}')">🖨 列印報價單</button>
           <button class="abtn warn rec-del" onclick="deleteRecord('${r.id}')">刪除這筆紀錄</button>
         </div>
       </details>`;
@@ -3388,11 +3536,10 @@ function renderAdmin(){
       <button class="abtn" onclick="changePin()">變更密碼</button>
     </div>
     <div class="setgrid">
-      <div class="setcard"><div class="st">密碼一覽（只有管理後台看得到）</div>
+      <div class="setcard"><div class="st">登入帳號（雲端驗證）</div>
         <div style="font-size:14px;color:var(--ink-soft);line-height:1.9">
-          <div><b>業務登入：</b>${SALES.map(r=>`${r}：<b style="color:var(--ink)">${(DB.repPins&&DB.repPins[r])||"—"}</b>`).join(" ・ ")}</div>
+          <div><b>員工密碼</b>已改為雲端伺服器驗證，後台看不到、也不再存在本系統裡。每個人登入後可用「改密碼」自行修改；忘記密碼請找 darren 到 Firebase 後台重設。新業務的初始密碼為 <b style="color:var(--ink)">oma2026</b>。</div>
           <div><b>客戶登入代碼：</b>${(DB.sales&&DB.sales.list||[]).map(r=>`${esc(r.key)}：<b style="color:var(--ink)">${esc(repCustCode(r))}</b>`).join(" ・ ")||"—"}　<span style="color:var(--ink-soft)">（自選模式：<b style="color:var(--ink)">${esc((DB.sales&&DB.sales.custBase)||"2026")}</b>）</span></div>
-          <div><b>部門：</b>採購：<b style="color:var(--ink)">${DB.buyerPin}</b> ・ 會計：<b style="color:var(--ink)">${DB.acctPin}</b> ・ 技術：<b style="color:var(--ink)">${DB.techPin}</b> ・ 出納：<b style="color:var(--ink)">${DB.cashierPin}</b> ・ 管理後台：<b style="color:var(--ink)">${DB.adminPin}</b></div>
         </div>
       </div>
       <div class="setcard"><div class="st">客戶送單通知</div>
@@ -3555,14 +3702,21 @@ function addRep(){
   if(!k){alert("請輸入英文代號");return;}
   if((DB.sales.list||[]).some(x=>String(x.key).toLowerCase()===k.toLowerCase())){alert("已有相同英文代號");return;}
   const code=(DB.sales.custBase||"2026")+k.toLowerCase();
-  DB.sales.list.push({key:k,zh:zh,title:"銷售經理",phone:"",email:"",line:"",pin:"123",code:""});
+  const authEmail=(_staffSlug(k)||"rep")+"@"+STAFF_EMAIL_DOMAIN;
+  DB.sales.list.push({key:k,zh:zh,title:"銷售經理",phone:"",email:"",line:"",pin:"123",code:"",authEmail:authEmail});
   saveTeam();renderTeamMgr();
   try{renderReps();populateLoginSel();}catch(_){}
-  toast(`已新增業務 ${k}（登入密碼 123 ・ 客戶代碼 ${code}）`);
+  if(window.fbAuth){   /* 同步開立雲端登入帳號（初始密碼 oma2026，請他登入後自行修改） */
+    fbCreateStaff(authEmail,"oma2026").then(()=>toast(`已新增業務 ${k}（初始登入密碼 oma2026 ・ 客戶代碼 ${code}）`))
+      .catch((e)=>alert("雲端帳號建立失敗（"+(e&&e.message||"網路問題")+"）。\n請找 darren 到 Firebase 後台手動新增帳號："+authEmail));
+  }else{
+    toast(`已新增業務 ${k}（登入密碼 123 ・ 客戶代碼 ${code}）`);
+  }
 }
 function delRep(i){
   const r=(DB.sales.list||[])[i];if(!r)return;
   if(!confirm(`刪除業務「${r.key}」？\n（歷史成交紀錄會保留，但此人的登入與客戶代碼會失效）`))return;
+  try{fbRemoveStaffFromAcl(staffEmailForRep(r.key));}catch(e){}   /* 從雲端白名單移除，登入立即失效 */
   DB.sales.list.splice(i,1);
   saveTeam();renderTeamMgr();
   try{renderReps();populateLoginSel();}catch(_){}
@@ -3718,6 +3872,7 @@ function addItem(ci,si){
   saveDB();renderCatalog();if(unlocked)renderAdmin();if(buyerUnlocked)renderBuyer();
 }
 function changePin(){
+  if(window.fbAuth&&window.fbIsStaff){ changeRolePin("admin"); return; }   /* 雲端版：改 Firebase 管理帳號密碼 */
   const np=prompt("設定新的管理密碼（數字或英數）：",DB.adminPin);
   if(np==null)return;DB.adminPin=np.trim()||"123";saveDB();toast("密碼已更新");
 }
