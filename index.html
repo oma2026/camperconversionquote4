@@ -759,7 +759,8 @@ body.custmode .cust-exit{display:inline-flex!important}
     <h2 style="font-size:23px;margin:6px 0 4px">歐馬企業 · 改裝報價系統</h2>
     <p style="color:var(--ink-soft);font-size:14px;margin-bottom:22px">請問您是？</p>
     <div style="display:flex;flex-direction:column;gap:12px">
-      <button class="pbtn" style="font-size:17px;padding:16px;background:#b1802a;color:#fff" onclick="pickEmployee()">👤 歐馬企業員工登入</button>
+      <button class="pbtn" style="font-size:17px;padding:16px;background:#b1802a;color:#fff" onclick="pickEmployee()">① 👤 員工登入</button>
+      <button class="abtn" style="font-size:17px;padding:16px" onclick="pickCustomer()">② 🧑 客戶登入</button>
     </div>
   </div>
 </div>
@@ -806,8 +807,8 @@ body.custmode .cust-exit{display:inline-flex!important}
 <div id="bizLock" class="modal-back" style="display:none" onclick="if(event.target===this&&SESSION&&SESSION.role)closeLogin()">
   <div class="modal-card" style="max-width:430px">
     <h2 style="font-size:22px;margin-bottom:14px">登入 Login</h2>
-    <label style="display:block;font-size:13px;font-weight:800;color:var(--ink-soft);margin-bottom:5px">選擇身分 ROLE</label>
-    <select id="loginSel" class="lock-sel" onchange="onLoginSelChange()"></select>
+    <label style="display:block;font-size:13px;font-weight:800;color:var(--ink-soft);margin-bottom:5px">英文名字 Name</label>
+    <input id="loginSel" class="lock-sel" placeholder="輸入你的英文名字" autocapitalize="off" autocorrect="off" spellcheck="false" onkeydown="if(event.key==='Enter')tryLogin()">
     <div id="loginPwWrap">
       <label style="display:block;font-size:13px;font-weight:800;color:var(--ink-soft);margin:12px 0 5px">密碼</label>
       <input id="bizPw" type="password" placeholder="輸入密碼" onkeydown="if(event.key==='Enter')tryLogin()" style="width:100%;box-sizing:border-box;border:1px solid var(--line-2);border-radius:9px;padding:11px;font-size:18px">
@@ -1552,13 +1553,13 @@ function populateLoginSel(){
 }
 function onLoginSelChange(){document.getElementById("loginPwWrap").style.display="";}
 function openLogin(){
-  populateLoginSel();
   const firstTime=!(SESSION&&SESSION.role);
   const back=document.getElementById("bizLock");
   back.classList.toggle("gate",firstTime);
   document.getElementById("loginCancel").style.display=firstTime?"none":"";
   const s=document.getElementById("loginSel");
-  if(SESSION&&SESSION.role){s.value=SESSION.role==="biz"?("rep:"+(SESSION.bizRep||"")):("role:"+SESSION.role);}
+  const NAME_FOR={admin:"darren",buyer:"purchase",acct:"accounting01",cashier:"accounting10",tech:"tech"};   // 角色→英文登入名（預填用）
+  if(SESSION&&SESSION.role){ s.value = SESSION.role==="biz" ? (SESSION.bizRep||"") : (NAME_FOR[SESSION.role]||""); } else { s.value=""; }
   onLoginSelChange();
   document.getElementById("bizErr").textContent="";document.getElementById("bizPw").value="";
   back.style.display="flex";
@@ -1832,10 +1833,13 @@ function fbRemoveStaffFromAcl(email){
   if(email&&window.firebaseUpdateDoc&&window.firebaseDB) window.firebaseUpdateDoc(window.firebaseDoc(window.firebaseDB,"acl","staff"),{emails:window.firebaseArrayRemove(email)}).catch(function(){});
 }
 function tryLogin(){
-  const v=document.getElementById("loginSel").value;
-  const pw=(document.getElementById("bizPw").value||"").trim();
   const err=document.getElementById("bizErr");
-  if(!v){err.textContent="請先選擇身分";return;}
+  const _raw=(document.getElementById("loginSel").value||"").trim(), _low=_raw.toLowerCase();
+  const ROLE_NAMES={darren:"role:admin",purchase:"role:buyer",accounting01:"role:acct",accounting04:"role:acct",accounting10:"role:cashier",tech:"role:tech"};   // 角色→英文登入名字
+  let v;
+  if(ROLE_NAMES[_low]) v=ROLE_NAMES[_low];
+  else { const _rk=(typeof SALES!=="undefined"?SALES:[]).find(k=>String(k).toLowerCase()===_low && k!=="業務共用"); if(!_rk){ err.textContent="找不到這個名字"; return; } v="rep:"+_rk; }
+  const pw=(document.getElementById("bizPw").value||"").trim();
   if(!pw){err.textContent="請輸入密碼";return;}
   if(window.fbAuth){
     /* 正式作法：密碼由 Firebase 伺服器核對；成功後重新載入頁面，讓資料同步以員工權限重新連線 */
