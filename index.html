@@ -2057,6 +2057,17 @@ function showEntryGate(){
   document.getElementById("entryGate").style.display="flex";
   updateTopLogout();
 }
+function _staffHandoff(){   // VIP 頁帶來的員工帳密 → 自動填入並送出登入
+  try{
+    var raw=sessionStorage.getItem("oma_staff_handoff"); if(!raw) return;
+    sessionStorage.removeItem("oma_staff_handoff");
+    var h=JSON.parse(raw); if(!h||!h.name) return;
+    if(h.ts && (Date.now()-h.ts>120000)) return;   // 逾 2 分鐘作廢
+    var s=document.getElementById("loginSel"), p=document.getElementById("bizPw");
+    if(s) s.value=h.name; if(p) p.value=h.pw||"";
+    setTimeout(function(){ if(typeof tryLogin==="function") tryLogin(); }, 150);
+  }catch(e){}
+}
 function pickEmployee(){document.getElementById("entryGate").style.display="none";openLogin();}
 function pickCustomer(){
   document.getElementById("entryGate").style.display="none";
@@ -4084,7 +4095,7 @@ renderQuote();
 applyRole();
 if(readVipHandoff()){setMode("biz");openCustomerFromHandoff(readVipHandoff());}   // 從 VIP 入口頁帶進來（最優先，蓋過本機殘留的員工/管理登入）
 else if(SESSION&&SESSION.role){routeToRole();updateBizPill();}
-else if(location.hash.toLowerCase().indexOf("staff")>=0){setMode("biz");pickEmployee();}   // 從 VIP 頁選「員工」帶進來 → 直接開員工登入，不再選一次
+else if(location.hash.toLowerCase().indexOf("staff")>=0){setMode("biz");pickEmployee();_staffHandoff();}   // 從 VIP 頁選「員工」帶進來 → 直接開員工登入；若帶了帳密就自動登入
 else{setMode("biz");showEntryGate();}
 updateInboxBtn();
 
