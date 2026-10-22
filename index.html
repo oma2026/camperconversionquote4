@@ -4084,6 +4084,7 @@ renderQuote();
 applyRole();
 if(readVipHandoff()){setMode("biz");openCustomerFromHandoff(readVipHandoff());}   // 從 VIP 入口頁帶進來（最優先，蓋過本機殘留的員工/管理登入）
 else if(SESSION&&SESSION.role){routeToRole();updateBizPill();}
+else if(location.hash.toLowerCase().indexOf("staff")>=0){setMode("biz");pickEmployee();}   // 從 VIP 頁選「員工」帶進來 → 直接開員工登入，不再選一次
 else{setMode("biz");showEntryGate();}
 updateInboxBtn();
 
