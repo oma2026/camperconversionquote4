@@ -1892,6 +1892,7 @@ function logout(){
   document.body.classList.remove("custmode");closeDeals();
   applyRole();updateBizPill();updateTopLogout();
   const el=document.getElementById("bizPw");if(el)el.value="";
+  if(location.hash.toLowerCase().indexOf("staff")>=0){ location.href="https://oma2026.github.io/vipentry/"; return; }   // 從 VIP 頁進來的員工 → 登出回 VIP 入口，重新選系統
   showEntryGate();
 }
 // 頁首「登出／離開」：不管員工任何身分或客戶模式都能用
