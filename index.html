@@ -2086,16 +2086,9 @@ function _staffHandoff(){   // VIP 頁帶來的員工帳密 → 背景自動登�
         tries++;
         var t=(document.getElementById("bizErr").textContent||"").trim();
         var working = (t==="") || /中…?$/.test(t) || t.indexOf("載入中")>=0;
-        if(!working){
+        if(!working){   // 帳密不對 → 回 VIP 入口重新輸入，App 永不顯示自己的登入框
           clearInterval(iv); hideStaffLoading();
-          document.getElementById("entryGate").style.display="none";
-          var back=document.getElementById("bizLock");
-          back.classList.add("gate");
-          var lc=document.getElementById("loginCancel"); if(lc) lc.style.display="none";
-          document.getElementById("bizPw").value="";
-          document.getElementById("bizErr").textContent=t;   // 保留錯誤訊息
-          back.style.display="flex";
-          setTimeout(function(){ var el=document.getElementById("bizPw"); if(el) el.focus(); },40);
+          location.href="https://oma2026.github.io/vipentry/";
         } else if(tries>40){ clearInterval(iv); }   // 8 秒保險（成功會自己 reload/收板）
       }, 200);
     }, 30);
@@ -4129,7 +4122,7 @@ renderQuote();
 applyRole();
 if(readVipHandoff()){setMode("biz");openCustomerFromHandoff(readVipHandoff());}   // 從 VIP 入口頁帶進來（最優先，蓋過本機殘留的員工/管理登入）
 else if(SESSION&&SESSION.role){routeToRole();updateBizPill();}
-else if(location.hash.toLowerCase().indexOf("staff")>=0){setMode("biz"); if(!_staffHandoff()) pickEmployee();}   // 從 VIP 頁選「員工」帶進來 → 帶了帳密就背景自動登入(不閃登入框)；沒帶才顯示登入框
+else if(location.hash.toLowerCase().indexOf("staff")>=0){setMode("biz"); if(!_staffHandoff()) location.href="https://oma2026.github.io/vipentry/";}   // 從 VIP 頁選「員工」帶進來 → 帶了帳密就背景自動登入(不閃登入框)；沒帶(重新整理等)→ 回 VIP 入口，App 永不顯示自己的登入框
 else{setMode("biz");showEntryGate();}
 updateInboxBtn();
 
