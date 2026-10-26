@@ -582,9 +582,8 @@ body.custmode .cust-exit{display:inline-flex!important}
 .bd-panel-h{display:flex;align-items:center;gap:10px;padding:14px 18px;font-size:16px;font-weight:800;color:var(--ink);border-bottom:1px solid var(--line);background:var(--paper-2)}
 .bd-panel-h .dp-badge{min-width:22px;height:22px;padding:0 8px;border-radius:11px;background:var(--pine);color:#fff;font-size:12px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
 .bd-tb{width:100%;border-collapse:collapse}
-.bd-tb th{text-align:left;font-size:12px;font-weight:700;color:var(--ink-soft);padding:10px 18px;background:var(--paper-2);border-bottom:1px solid var(--line);white-space:nowrap}
-.bd-tb td{padding:13px 18px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:middle}
-.bd-tb tr:last-child td{border-bottom:0}
+.bd-tb th{text-align:left;font-size:12px;font-weight:700;color:var(--ink-soft);padding:10px 16px;background:#eef0e6;border:1px solid #d7d9cc;white-space:nowrap}
+.bd-tb td{padding:12px 16px;border:1px solid #e3e1d8;font-size:14px;vertical-align:middle}
 .bd-tb .tb-cust{font-weight:800;color:var(--ink)}
 .bd-tb .tb-view{text-align:right;white-space:nowrap}
 .bd-view-btn{border:none;background:var(--pine);color:#fff;border-radius:9px;padding:8px 16px;font-weight:800;font-size:13.5px;cursor:pointer;font-family:inherit}
@@ -1660,12 +1659,14 @@ function refreshBizDash(){
         var k=caseStageCamper(it), label=caseStageLabelCamper(k);
         var color=(k==="submitted")?"#b23b2e":((k==="dealt"||k==="ordered")?"#2f7d4f":"#a86a12");
         var act=isSub?("importSubmission('"+it.id+"')"):("editRecord('"+it.id+"')");
-        var btn=isSub?"看報價":"開啟";
-        var dl=isSub?"":('<a href="javascript:void(0)" onclick="reprintRecord(\''+it.id+'\')" style="color:#1a56c6;text-decoration:underline;margin-right:12px;font-size:13px">報價單</a>');
+        var del=isSub?("deleteSubmission('"+it.id+"');refreshBizDash()"):("deleteRecord('"+it.id+"');refreshBizDash()");
+        var docs=isSub?"":('<a href="javascript:void(0)" onclick="reprintRecord(\''+it.id+'\')" style="color:#1a56c6;text-decoration:underline;margin-right:10px;font-size:13px">報價單</a>'
+                          +'<a href="javascript:void(0)" onclick="caseGenContract(\''+it.id+'\')" style="color:#1a56c6;text-decoration:underline;margin-right:12px;font-size:13px">合約</a>');
         return '<tr><td class="tb-cust">'+esc(it.cust||"（未填客戶）")+'</td><td>'+esc(it.car||"—")+'</td>'
               +'<td style="white-space:nowrap"><b style="color:'+color+'">'+esc(label)+'</b></td>'
               +'<td style="color:var(--ink-soft);white-space:nowrap">'+fmtTs(it.ts)+'</td>'
-              +'<td style="text-align:right;white-space:nowrap">'+dl+'<button class="bd-view-btn" onclick="'+act+'">'+btn+'</button></td></tr>';
+              +'<td style="text-align:right;white-space:nowrap">'+docs+'<button class="bd-view-btn" onclick="'+act+'">檢視</button>'
+              +'<a href="javascript:void(0)" onclick="'+del+'" style="color:#c0392b;text-decoration:underline;margin-left:12px;font-size:13px">刪除</a></td></tr>';
       }).join("");
       var badge=(showBadge&&arr.length)?' <span class="dp-badge">'+arr.length+'</span>':'';
       return '<div class="bd-panel"><div class="bd-panel-h">'+title+badge+'</div><div style="overflow-x:auto"><table class="bd-tb"><thead><tr><th>客戶</th><th>車型</th><th>狀態</th><th>時間</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
