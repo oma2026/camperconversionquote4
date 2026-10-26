@@ -564,6 +564,32 @@ body.custmode .cust-exit{display:inline-flex!important}
 #bdCodeModal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:300;padding:20px}
 #bdCodeModal .bdc-card{background:var(--card);border-radius:16px;padding:24px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);position:relative}
 @media(max-width:720px){.bd-stats{grid-template-columns:repeat(3,1fr)}.bd-cards{grid-template-columns:1fr}}
+/* 業務端首頁：左選單 ｜ 右側「客戶送來的報價單」表格（比照國泰主管儀表板） */
+.bd-shell{display:flex;gap:30px;align-items:flex-start}
+.bd-nav{flex:0 0 250px;position:sticky;top:16px}
+.bd-navgrp{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-soft);font-weight:800;margin:20px 10px 8px}
+.bd-navgrp:first-child{margin-top:0}
+.bd-item{position:relative;width:100%;text-align:left;display:flex;align-items:center;gap:12px;border:0;background:transparent;border-radius:12px;padding:11px 12px;cursor:pointer;color:var(--ink);font-family:inherit;transition:background .15s}
+.bd-item:hover{background:var(--paper-2)}
+.bd-item .bd-navic{width:38px;height:38px;flex:none;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:19px;background:var(--paper-2)}
+.bd-item .bd-navtx{min-width:0}
+.bd-item .bd-navtx b{display:block;font-size:15px;font-weight:800;line-height:1.25}
+.bd-item .bd-navtx small{display:block;font-size:12px;color:var(--ink-soft);margin-top:1px}
+.bd-navbadge{margin-left:auto;min-width:22px;height:22px;padding:0 7px;border-radius:11px;background:var(--pine);color:#fff;font-size:12px;font-weight:800;display:none;align-items:center;justify-content:center}
+.bd-navbadge.on{display:flex}
+.bd-main{flex:1 1 auto;min-width:0}
+.bd-panel{border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-top:24px;background:var(--card)}
+.bd-panel-h{display:flex;align-items:center;gap:10px;padding:14px 18px;font-size:16px;font-weight:800;color:var(--ink);border-bottom:1px solid var(--line);background:var(--paper-2)}
+.bd-panel-h .dp-badge{min-width:22px;height:22px;padding:0 8px;border-radius:11px;background:var(--pine);color:#fff;font-size:12px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
+.bd-tb{width:100%;border-collapse:collapse}
+.bd-tb th{text-align:left;font-size:12px;font-weight:700;color:var(--ink-soft);padding:10px 18px;background:var(--paper-2);border-bottom:1px solid var(--line);white-space:nowrap}
+.bd-tb td{padding:13px 18px;border-bottom:1px solid var(--line);font-size:14px;vertical-align:middle}
+.bd-tb tr:last-child td{border-bottom:0}
+.bd-tb .tb-cust{font-weight:800;color:var(--ink)}
+.bd-tb .tb-view{text-align:right;white-space:nowrap}
+.bd-view-btn{border:none;background:var(--pine);color:#fff;border-radius:9px;padding:8px 16px;font-weight:800;font-size:13.5px;cursor:pointer;font-family:inherit}
+.bd-empty{padding:30px 18px;color:var(--ink-soft);font-size:14px;text-align:center;line-height:1.7}
+@media(max-width:720px){.bd-shell{flex-direction:column;gap:18px}.bd-nav{flex:none;width:100%;position:static}}
 
 /* ===== 客戶案件 pipeline (2026-07) ===== */
 #bizCases{max-width:1080px;margin:0 auto;padding:26px 18px 70px}
@@ -655,27 +681,21 @@ body.custmode .cust-exit{display:inline-flex!important}
     <button class="btn-print" style="padding:12px 30px;border-radius:10px;font-weight:800" onclick="openLogin()">登入</button>
   </div>
   <div id="bizDash" style="display:none">
-    <div class="bd-hi" id="bdHi">工作台</div>
-    <div class="bd-sub">請選擇要進行的作業</div>
-    <div class="bd-stats" id="bdStats"></div>
-    <div class="bd-cards">
-      <div class="bd-card" onclick="bizNewQuote()">
-        <div class="bd-ic">📝</div>
-        <div><div class="bd-t">新增報價</div><div class="bd-d">選品項 → 填客戶 → 出報價單</div></div>
-      </div>
-      <div class="bd-card" onclick="openCasesView()">
-        <div class="bd-ic">🗂️</div>
-        <div><div class="bd-t">客戶案件</div><div class="bd-d">所有案件一路到底：報價・成交・合約</div></div>
-        <span class="bd-badge" id="bdSubBadge">0</span>
-      </div>
-      <div class="bd-card" onclick="openMyCustCode()">
-        <div class="bd-ic">🔑</div>
-        <div><div class="bd-t">我的客戶代碼</div><div class="bd-d">給客戶的登入代碼</div></div>
-      </div>
-    </div>
-    <div class="bd-foot">
-      <button onclick="changeMyPin()">帳號設定</button>
-      <button onclick="logout()">登出</button>
+    <div class="bd-shell">
+      <aside class="bd-nav">
+        <div class="bd-navgrp">作業</div>
+        <button class="bd-item" onclick="bizNewQuote()"><span class="bd-navic">📝</span><span class="bd-navtx"><b>新增報價</b><small>選品項 → 填客戶 → 出報價單</small></span></button>
+        <button class="bd-item" onclick="openCasesView()"><span class="bd-navic">🗂️</span><span class="bd-navtx"><b>客戶案件</b><small>報價・成交・合約</small></span><span class="bd-navbadge" id="bdSubBadge">0</span></button>
+        <button class="bd-item" onclick="openMyCustCode()"><span class="bd-navic">🔑</span><span class="bd-navtx"><b>我的客戶代碼</b><small>給客戶的登入代碼</small></span></button>
+        <div class="bd-navgrp">帳號</div>
+        <button class="bd-item" onclick="changeMyPin()"><span class="bd-navic">⚙️</span><span class="bd-navtx"><b>帳號設定</b></span></button>
+        <button class="bd-item" onclick="logout()"><span class="bd-navic">🚪</span><span class="bd-navtx"><b>登出</b></span></button>
+      </aside>
+      <section class="bd-main">
+        <div class="bd-hi" id="bdHi">工作台</div>
+        <div class="bd-sub">請選擇要進行的作業</div>
+        <div id="bdInbox"></div>
+      </section>
     </div>
   </div>
   <div id="bdCodeModal" onclick="if(event.target===this)closeMyCustCode()"><div class="bdc-card">
@@ -1582,11 +1602,24 @@ function bizCaseStats(){
 }
 function refreshBizDash(){
   var s=bizCaseStats();
-  var el=document.getElementById("bdStats");
-  if(el){ var sd=[["客戶已送出",s.submitted],["已報價",s.quoted],["待上傳合約",s.contract],["待出納確認訂金",s.awaiting],["已成交",s.dealt]];
-    el.innerHTML=sd.map(function(x){return '<div class="bd-stat"><div class="n">'+x[1]+'</div><div class="l">'+x[0]+'</div></div>';}).join(""); }
-  var b=document.getElementById("bdSubBadge"); if(b)b.textContent=s.submitted;
+  var b=document.getElementById("bdSubBadge"); if(b){ b.textContent=s.submitted; b.classList.toggle("on", s.submitted>0); }
   var hi=document.getElementById("bdHi"); if(hi){ var rp=REPS[currentRep]||{}; hi.textContent="Hi，"+(rp.zh||rp.title||currentRep||"業務"); }
+  /* 工作台：客戶送來的報價單（表格＋看報價鈕，比照國泰主管儀表板） */
+  var di=document.getElementById("bdInbox");
+  if(di){
+    var list=(SESSION.inbox||[]).filter(function(x){ return !x.rep || x.rep===currentRep; }).slice().sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
+    if(!list.length){
+      di.innerHTML='<div class="bd-panel"><div class="bd-panel-h">客戶送來的報價單</div><div class="bd-empty">目前沒有客戶送來的報價單。<br>客戶用你發的代碼送出後，就會出現在這裡。</div></div>';
+    }else{
+      var rows=list.map(function(x){
+        var nm=esc(x.name||"（未填客戶）"), car=esc(x.car||"—"), n=(x.items||[]).length;
+        return '<tr><td class="tb-cust">'+nm+'</td><td>'+car+'</td><td style="color:var(--ink-soft);white-space:nowrap">'+fmtTs(x.ts)+(n?' ・ '+n+' 項':'')+'</td>'
+              +'<td class="tb-view"><button class="bd-view-btn" onclick="importSubmission(\''+x.id+'\')">看報價</button></td></tr>';
+      }).join("");
+      di.innerHTML='<div class="bd-panel"><div class="bd-panel-h">客戶送來的報價單 <span class="dp-badge">'+list.length+'</span></div>'
+        +'<div style="overflow-x:auto"><table class="bd-tb"><thead><tr><th>客戶</th><th>車型</th><th>送單時間</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+    }
+  }
 }
 function showBizDash(){
   if(document.body.classList.contains("custmode"))return;
