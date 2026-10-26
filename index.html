@@ -2051,13 +2051,9 @@ function exitCustomer(){
 
 /* ---------- 入口頁：員工 / 客戶 ---------- */
 let custInfo={name:"",car:"",rep:""};
-function showEntryGate(){
-  if(location.hash.toLowerCase().indexOf("staff")>=0){ location.href="https://oma2026.github.io/vipentry/"; return; }   // 從 VIP 頁來的（#staff）→ 一律回 VIP 入口選系統
-  const el=document.getElementById("entryLogo");if(el&&!el.innerHTML)el.innerHTML='<div style="background:#fff;padding:8px 14px;border-radius:12px;display:inline-flex">'+LOGO_SVG+'</div>';
-  document.getElementById("bizLock").style.display="none";
-  document.getElementById("custInfoModal").style.display="none";
-  document.getElementById("entryGate").style.display="flex";
-  updateTopLogout();
+function showEntryGate(){   // 身分關卡已移除：沒登入一律回 VIP 入口（唯一入口），App 自己不再出現①員工/②客戶
+  try{ if(window.self!==window.top){ window.top.location.reload(); return; } }catch(e){}   // 在 VIP iframe 內（客戶）→ 重載入口頁回登入
+  location.href="https://oma2026.github.io/vipentry/";
 }
 function showStaffLoading(){
   var d=document.getElementById("staffLoadingBg");
