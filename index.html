@@ -2053,6 +2053,31 @@ function fbCreateStaff(email,pw){
 function fbRemoveStaffFromAcl(email){
   if(email&&window.firebaseUpdateDoc&&window.firebaseDB) window.firebaseUpdateDoc(window.firebaseDoc(window.firebaseDB,"acl","staff"),{emails:window.firebaseArrayRemove(email)}).catch(function(){});
 }
+/* ===== 改裝登入改走本機密碼（123／123456 皆可）；雲端寫入用一組共用帳號 =====
+   相容：個人原本的 Firebase 密碼仍可登入；任何一次真正登入會自動把共用帳號建立好（加進白名單），之後大家打 123 也能存雲端。 */
+var CAMPER_SHARED_EMAIL="shared@quote.o-ma.com.tw";
+var CAMPER_SHARED_PW="oma-camper-cloud-2026";
+function _isSharedCloudUser(){ return !!(window.fbUser && window.fbUser.email && window.fbUser.email.toLowerCase()===CAMPER_SHARED_EMAIL.toLowerCase()); }
+function _bizLocalPwOK(v,pw){
+  if(pw==="123"||pw==="123456") return true;
+  if(v.indexOf("rep:")===0){ var r=v.slice(4); return !!(DB.repPins&&pw===DB.repPins[r]); }
+  var role=v.slice(5); var key={admin:"adminPin",buyer:"buyerPin",acct:"acctPin",tech:"techPin",cashier:"cashierPin"}[role]; return pw===DB[key];
+}
+function _bizLocalApplyAndRender(v){
+  if(v.indexOf("rep:")===0){ var r=v.slice(4); SESSION.role="biz";SESSION.bizRep=r;SESSION.rep=r;currentRep=r;quote=SESSION.quotes[currentRep];saveSession();
+    try{loadCust();loadDeal();renderDealStatus();renderReps();renderCatalog();renderQuote();}catch(e){} }
+  else{ SESSION.role=v.slice(5); saveSession(); }
+}
+function _bizSharedCloudLogin(){
+  if(!window.fbAuth||!window.fbStaffLogin) return Promise.resolve();
+  if(_isSharedCloudUser()) return Promise.resolve();
+  return window.fbStaffLogin(CAMPER_SHARED_EMAIL,CAMPER_SHARED_PW).catch(function(e){ console.warn("共用雲端帳號登入失敗（改離線，仍可用）：",e); });
+}
+function _ensureSharedCloudAccount(){
+  try{ if(localStorage.getItem("camper_shared_ready")==="1") return Promise.resolve(); }catch(e){}
+  if(typeof fbCreateStaff!=="function") return Promise.resolve();
+  return fbCreateStaff(CAMPER_SHARED_EMAIL,CAMPER_SHARED_PW).then(function(){ try{localStorage.setItem("camper_shared_ready","1");}catch(e){} }).catch(function(e){ console.warn("建立共用雲端帳號失敗（稍後再試）：",e); });
+}
 function tryLogin(){
   const err=document.getElementById("bizErr");
   const _raw=(document.getElementById("loginSel").value||"").trim(), _low=_raw.toLowerCase();
@@ -2063,7 +2088,7 @@ function tryLogin(){
   const pw=(document.getElementById("bizPw").value||"").trim();
   if(!pw){err.textContent="請輸入密碼";return;}
   if(window.fbAuth){
-    /* 正式作法：密碼由 Firebase 伺服器核對；成功後重新載入頁面，讓資料同步以員工權限重新連線 */
+    /* 個人原本的 Firebase 密碼仍可登入（維持相容）；驗不過時若打 123／123456／本機密碼，就改用本機登入＋共用帳號連雲端 */
     const email=v.startsWith("rep:")?staffEmailForRep(v.slice(4)):staffEmailForRole(v.slice(5));
     err.textContent="驗證中…";
     window.fbStaffLogin(email,pw).then(()=>{
@@ -2071,8 +2096,17 @@ function tryLogin(){
       else{SESSION.role=v.slice(5);}
       try{localStorage.setItem(SESS_KEY,JSON.stringify(SESSION));}catch(e){}
       err.textContent="登入成功，載入中…";
-      setTimeout(()=>location.reload(),80);
-    }).catch((e)=>{ err.textContent=fbLoginErrText(e); });
+      _ensureSharedCloudAccount();   // 背景把共用帳號建好（成功才記旗標，沒完成下次登入會重試），之後大家用 123 也能存雲端
+      setTimeout(()=>location.reload(),600);
+    }).catch((e)=>{
+      if(_bizLocalPwOK(v,pw)){   // 個人密碼不對，但打的是 123／123456／本機密碼 → 本機登入＋共用帳號連雲端
+        err.textContent="登入中…";
+        if(v.startsWith("rep:")){const r=v.slice(4);SESSION.role="biz";SESSION.bizRep=r;SESSION.rep=r;}
+        else{SESSION.role=v.slice(5);}
+        try{localStorage.setItem(SESS_KEY,JSON.stringify(SESSION));}catch(_e){}
+        _bizSharedCloudLogin().finally(function(){ setTimeout(()=>location.reload(),150); });   // 存好身分、連上共用帳號後重載；boot 會從 SESSION 回復登入
+      }else{ err.textContent=fbLoginErrText(e); }
+    });
     return;
   }
   /* 離線備援：Firebase 起不來（無網路等）時退回舊的本機密碼比對 */
@@ -2159,7 +2193,7 @@ function bizNav(){
   setMode("biz");
 }
 function changeMyPin(){
-  if(window.fbAuth&&window.fbIsStaff){   /* 雲端版：改的是 Firebase 帳號密碼（只能改自己這個登入身分的） */
+  if(window.fbAuth&&window.fbIsStaff&&!_isSharedCloudUser()){   /* 雲端版：改的是 Firebase 帳號密碼（只能改自己這個登入身分的）。共用帳號登入時不走這裡，改本機密碼 */
     const cur=prompt("請先輸入目前密碼：");if(cur==null)return;
     const np=prompt(`設定 ${currentRep} 的新密碼（至少 6 碼）：`);if(np==null)return;
     const v=np.trim();if(v.length<6){alert("新密碼至少要 6 碼");return;}
@@ -2178,7 +2212,7 @@ function changeMyPin(){
   saveTeam();toast("密碼已更新");
 }
 function changeRolePin(role){
-  if(window.fbAuth&&window.fbIsStaff){   /* 雲端版：只能改「目前登入身分」自己的密碼 */
+  if(window.fbAuth&&window.fbIsStaff&&!_isSharedCloudUser()){   /* 雲端版：只能改「目前登入身分」自己的密碼。共用帳號登入時改本機密碼 */
     const myEmail=(window.fbUser&&window.fbUser.email||"").toLowerCase();
     if(myEmail!==staffEmailForRole(role)){alert("請先用該身分登入，再從這裡改它的密碼。\n（忘記密碼時請找 darren 到 Firebase 後台重設）");return;}
     const cur=prompt("請先輸入目前密碼：");if(cur==null)return;
