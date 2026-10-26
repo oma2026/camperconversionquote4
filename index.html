@@ -562,7 +562,7 @@ body.custmode .cust-exit{display:inline-flex!important}
 .bd-foot{margin-top:24px;display:flex;gap:10px}
 .bd-foot button{border:1px solid var(--line-2);background:var(--card);color:var(--ink-soft);border-radius:10px;padding:9px 18px;font-weight:700;font-size:14px}
 #bdCodeModal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;z-index:300;padding:20px}
-#bdCodeModal .bdc-card{background:var(--card);border-radius:16px;padding:24px;max-width:440px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);position:relative}
+#bdCodeModal .bdc-card{background:var(--card);border-radius:16px;padding:24px;max-width:560px;width:100%;max-height:88vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);position:relative}
 @media(max-width:720px){.bd-stats{grid-template-columns:repeat(3,1fr)}.bd-cards{grid-template-columns:1fr}}
 /* 業務端首頁：左選單 ｜ 右側「客戶送來的報價單」表格（比照國泰主管儀表板） */
 .bd-shell{display:flex;gap:30px;align-items:flex-start}
@@ -1415,6 +1415,41 @@ function repByCustCode(input){
   for(const r of list){if(lp===repCustCode(r).toLowerCase())return r.key;}
   return null;
 }
+/* ===== 改裝客戶代碼（虛擬帳號）：一個客戶一組隨機碼，掛在發碼的業務底下，存 DB.sales（同步改裝雲端） ===== */
+function _camperRepEntry(repKey){ return ((DB.sales&&DB.sales.list)||[]).find(function(r){return r.key===repKey;}); }
+function _allCamperVipCodes(){
+  var set=new Set();
+  ((DB.sales&&DB.sales.list)||[]).forEach(function(r){
+    try{ set.add(repCustCode(r).toLowerCase()); }catch(e){}
+    (r.vipCustomers||[]).forEach(function(c){ if(c&&c.code) set.add(String(c.code).toLowerCase()); });
+  });
+  return set;
+}
+function genCamperVipCode(){
+  var AL="ABCDEFGHJKMNPQRSTUVWXYZ23456789", used=_allCamperVipCodes(), code="";
+  for(var t=0;t<80;t++){ code=""; for(var i=0;i<6;i++) code+=AL.charAt(Math.floor(Math.random()*AL.length)); if(!used.has(code.toLowerCase())) return code; }
+  return code;
+}
+function listCamperVipCustomers(repKey){ var r=_camperRepEntry(repKey); return (r&&Array.isArray(r.vipCustomers))?r.vipCustomers:[]; }
+function addCamperVipCustomer(repKey, note){
+  var r=_camperRepEntry(repKey); if(!r) return null;
+  if(!Array.isArray(r.vipCustomers)) r.vipCustomers=[];
+  var code=genCamperVipCode();
+  r.vipCustomers.unshift({code:code, note:(note||"").trim(), active:true, ts:Date.now()});
+  saveDB(); return code;
+}
+function setCamperVipActive(repKey, code, active){
+  var r=_camperRepEntry(repKey); if(!r||!r.vipCustomers) return;
+  var c=r.vipCustomers.find(function(x){return x.code===code;}); if(c){ c.active=!!active; saveDB(); }
+}
+/* VIP 入口／App 用：全站找這組改裝碼 → {rep, active} */
+function findCamperVipCustomer(code){
+  var low=String(code||"").trim().toLowerCase(); if(!low) return null;
+  var list=(DB.sales&&DB.sales.list)||[];
+  for(var i=0;i<list.length;i++){ var cs=list[i].vipCustomers||[];
+    for(var j=0;j<cs.length;j++){ if(cs[j]&&String(cs[j].code).toLowerCase()===low) return {rep:list[i].key, active:cs[j].active!==false}; } }
+  return null;
+}
 // 新增業務後，補上 SESSION 對應的空白欄位；業務被刪時把游標移回「業務共用」
 function ensureSessionSlots(){
   if(!SESSION)return;
@@ -1604,21 +1639,28 @@ function refreshBizDash(){
   var s=bizCaseStats();
   var b=document.getElementById("bdSubBadge"); if(b){ b.textContent=s.submitted; b.classList.toggle("on", s.submitted>0); }
   var hi=document.getElementById("bdHi"); if(hi){ var rp=REPS[currentRep]||{}; hi.textContent="Hi，"+(rp.zh||rp.title||currentRep||"業務"); }
-  /* 工作台：客戶送來的報價單（表格＋看報價鈕，比照國泰主管儀表板） */
+  /* 工作台：兩個區塊——客戶送來的報價單、我自己建的案件（表格，比照國泰主管儀表板） */
   var di=document.getElementById("bdInbox");
   if(di){
-    var list=(SESSION.inbox||[]).filter(function(x){ return !x.rep || x.rep===currentRep; }).slice().sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
-    if(!list.length){
-      di.innerHTML='<div class="bd-panel"><div class="bd-panel-h">客戶送來的報價單</div><div class="bd-empty">目前沒有客戶送來的報價單。<br>客戶用你發的代碼送出後，就會出現在這裡。</div></div>';
-    }else{
-      var rows=list.map(function(x){
-        var nm=esc(x.name||"（未填客戶）"), car=esc(x.car||"—"), n=(x.items||[]).length;
-        return '<tr><td class="tb-cust">'+nm+'</td><td>'+car+'</td><td style="color:var(--ink-soft);white-space:nowrap">'+fmtTs(x.ts)+(n?' ・ '+n+' 項':'')+'</td>'
-              +'<td class="tb-view"><button class="bd-view-btn" onclick="importSubmission(\''+x.id+'\')">看報價</button></td></tr>';
+    var items=(typeof _caseItemsCamper==="function")?_caseItemsCamper():[];
+    var mkPanel=function(title, arr, isSub, empty, showBadge){
+      if(!arr.length) return '<div class="bd-panel"><div class="bd-panel-h">'+title+'</div><div class="bd-empty">'+empty+'</div></div>';
+      var rows=arr.map(function(it){
+        var k=caseStageCamper(it), label=caseStageLabelCamper(k);
+        var color=(k==="submitted")?"#b23b2e":((k==="dealt"||k==="ordered")?"#2f7d4f":"#a86a12");
+        var act=isSub?("importSubmission('"+it.id+"')"):("editRecord('"+it.id+"')");
+        var btn=isSub?"看報價":"開啟";
+        var dl=isSub?"":('<a href="javascript:void(0)" onclick="reprintRecord(\''+it.id+'\')" style="color:#1a56c6;text-decoration:underline;margin-right:12px;font-size:13px">報價單</a>');
+        return '<tr><td class="tb-cust">'+esc(it.cust||"（未填客戶）")+'</td><td>'+esc(it.car||"—")+'</td>'
+              +'<td style="white-space:nowrap"><b style="color:'+color+'">'+esc(label)+'</b></td>'
+              +'<td style="color:var(--ink-soft);white-space:nowrap">'+fmtTs(it.ts)+'</td>'
+              +'<td style="text-align:right;white-space:nowrap">'+dl+'<button class="bd-view-btn" onclick="'+act+'">'+btn+'</button></td></tr>';
       }).join("");
-      di.innerHTML='<div class="bd-panel"><div class="bd-panel-h">客戶送來的報價單 <span class="dp-badge">'+list.length+'</span></div>'
-        +'<div style="overflow-x:auto"><table class="bd-tb"><thead><tr><th>客戶</th><th>車型</th><th>送單時間</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
-    }
+      var badge=(showBadge&&arr.length)?' <span class="dp-badge">'+arr.length+'</span>':'';
+      return '<div class="bd-panel"><div class="bd-panel-h">'+title+badge+'</div><div style="overflow-x:auto"><table class="bd-tb"><thead><tr><th>客戶</th><th>車型</th><th>狀態</th><th>時間</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+    };
+    di.innerHTML = mkPanel("客戶送來的報價單", items.filter(function(it){return it.type==="sub";}), true, "目前沒有客戶送來的報價單。客戶用你發的代碼送出後，就會出現在這裡。", true)
+                 + mkPanel("我自己建的案件", items.filter(function(it){return it.type==="rec";}), false, "目前沒有自己建的案件。按「新增報價」做的報價會出現在這裡。", false);
   }
 }
 function showBizDash(){
@@ -1647,17 +1689,57 @@ function openCasesView(){
   renderBizCases(); window.scrollTo(0,0);
 }
 function openMyCustCode(){
-  var base=(DB&&DB.sales&&DB.sales.custBase)||"";
-  var rp=REPS[currentRep]||{};
-  var code=rp.code||(base+(currentRep||""));
-  window._myCustCode=code;
   var body=document.getElementById("bdCodeBody");
-  if(body) body.innerHTML='<p style="color:var(--ink-soft);font-size:14px;margin:0 0 12px">把這組代碼給客戶，客戶在選配單輸入就能開始選配。</p>'
-    +'<div style="font-family:monospace;font-size:22px;font-weight:800;background:var(--paper-2);border:1px solid var(--line-2);border-radius:10px;padding:16px;text-align:center;letter-spacing:1px;word-break:break-all">'+esc(code)+'</div>'
-    +'<button style="width:100%;margin-top:12px;padding:11px;border-radius:10px;font-weight:800;background:var(--pine);color:#fff;border:none;cursor:pointer" onclick="bdCopyCode()">複製代碼</button>';
+  if(body){
+    body.innerHTML=
+       '<div style="padding:13px 14px;border:1px solid var(--line-2);border-radius:12px;background:var(--paper-2)">'
+        +'<div style="font-weight:800;margin-bottom:9px">＋ 發一組新代碼給客戶</div>'
+        +'<div style="font-size:12px;color:var(--ink-soft);font-weight:600;margin-bottom:4px">備註</div>'
+        +'<input id="camperNewNote" placeholder="例：台北 王先生、0912…" style="width:100%;box-sizing:border-box;border:1px solid var(--line-2);border-radius:9px;padding:10px;font-size:14px;font-family:inherit">'
+        +'<button style="width:100%;margin-top:11px;padding:11px;border-radius:10px;font-weight:800;background:var(--pine);color:#fff;border:none;cursor:pointer" onclick="camperAddCode()">產生代碼</button>'
+      +'</div>'
+      +'<div style="font-weight:800;margin:16px 0 8px">已發出的代碼</div>'
+      +'<div id="camperCodeList"></div>'
+      +'<div style="font-size:13px;color:var(--ink-soft);line-height:1.7;margin-top:12px">把代碼給客戶，請他到 <b>https://oma2026.github.io/vipentry/</b> 輸入代碼即可（不用打名字）。送出的單會進你的「客戶案件」。</div>';
+    renderCamperCodes();
+  }
   document.getElementById("bdCodeModal").style.display="flex";
 }
-function bdCopyCode(){ var c=window._myCustCode||""; try{ navigator.clipboard.writeText(c); toast("已複製代碼"); }catch(e){ toast(c); } }
+function renderCamperCodes(){
+  var wrap=document.getElementById("camperCodeList"); if(!wrap) return;
+  var list=listCamperVipCustomers(currentRep);
+  if(!list.length){ wrap.innerHTML='<div style="color:var(--ink-soft);padding:8px 2px;font-size:14px">還沒發過代碼。用上面「發一組新代碼」產生第一組。</div>'; return; }
+  var inbox=SESSION.inbox||[];
+  var rows=list.map(function(c){
+    var on=c.active!==false;
+    var sub=inbox.filter(function(x){ return x.vipCode && String(x.vipCode).toLowerCase()===String(c.code).toLowerCase(); }).sort(function(a,b){ return (b.ts||0)-(a.ts||0); })[0];
+    var custCell;
+    if(sub){ custCell='<a href="javascript:void(0)" onclick="camperViewSub(\''+sub.id+'\')" style="color:#1a56c6;text-decoration:underline;font-weight:700;cursor:pointer">'+esc(c.note||sub.name||"查看報價")+'</a>'; }
+    else if(c.note){ custCell=esc(c.note); }
+    else { custCell='<span style="color:var(--ink-soft)">—</span>'; }
+    var statusCell = !on ? '<span style="color:#9a3b2e;font-weight:700">已停用</span>'
+                    : (sub ? '<span style="color:#2f7d4f;font-weight:700">已送報價</span>' : '<span style="color:var(--ink-soft)">尚未使用</span>');
+    return '<tr'+(on?'':' style="opacity:.6"')+'>'
+      +'<td style="font-family:monospace;font-weight:800;letter-spacing:2px">'+esc(c.code)+'</td>'
+      +'<td>'+custCell+'</td>'
+      +'<td style="white-space:nowrap">'+statusCell+'</td>'
+      +'<td style="white-space:nowrap;text-align:right"><button class="bd-view-btn" style="background:var(--card);color:var(--ink);border:1px solid var(--line-2);padding:7px 12px" onclick="camperCopyCode(\''+esc(c.code)+'\')">複製</button> <button class="bd-view-btn" style="background:var(--card);color:var(--ink);border:1px solid var(--line-2);padding:7px 12px" onclick="camperToggleCode(\''+esc(c.code)+'\','+(on?'false':'true')+')">'+(on?'停用':'啟用')+'</button></td>'
+    +'</tr>';
+  }).join("");
+  wrap.innerHTML='<div style="overflow-x:auto;border:1px solid var(--line-2);border-radius:12px"><table class="bd-tb"><thead><tr><th>代碼</th><th>客戶</th><th>狀態</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+function camperAddCode(){
+  if(!currentRep||currentRep==="業務共用"){ toast("請先以業務身分登入"); return; }
+  var note=(document.getElementById("camperNewNote")||{}).value||"";
+  var code=addCamperVipCustomer(currentRep, note);
+  if(!code){ toast("產生失敗，請重試"); return; }
+  var nn=document.getElementById("camperNewNote"); if(nn) nn.value="";
+  renderCamperCodes();
+  toast("已產生代碼："+code);
+}
+function camperToggleCode(code, active){ setCamperVipActive(currentRep, code, active); renderCamperCodes(); }
+function camperCopyCode(code){ try{ navigator.clipboard.writeText(code); toast("已複製代碼"); }catch(e){ toast(code); } }
+function camperViewSub(subId){ closeMyCustCode(); if(typeof importSubmission==="function") importSubmission(subId); }
 function closeMyCustCode(){ document.getElementById("bdCodeModal").style.display="none"; }
 /* ===== 客戶案件 pipeline 渲染 (2026-07) ===== */
 function _caseItemsCamper(){
@@ -2203,7 +2285,7 @@ function submitCustomer(){
   }
   if(!_bizGuard("submitCustomer",2500))return;
   const items=ids.map(id=>{const f=findItem(id);const it=f?f.item:{};return {i:id,q:quote[id].qty,n:it.name||"",mo:it.model||""};});
-  const sub={id:"S"+Date.now()+"_"+Math.random().toString(36).slice(2,5),ts:Date.now(),rep:custInfo.rep,name:custInfo.name,car:custInfo.car,items:items,other:other,note:note};
+  const sub={id:"S"+Date.now()+"_"+Math.random().toString(36).slice(2,5),ts:Date.now(),rep:custInfo.rep,name:custInfo.name,car:custInfo.car,items:items,other:other,note:note,vipCode:((window._handoff&&window._handoff.pin)||"")};
   SESSION.inbox.push(sub);
   lastLocalSubId=sub.id;
   saveSession();fbSaveSubmission(sub);
