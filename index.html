@@ -583,7 +583,7 @@ body.custmode .cust-exit{display:inline-flex!important}
 .bd-panel-h .dp-badge{min-width:22px;height:22px;padding:0 8px;border-radius:11px;background:var(--pine);color:#fff;font-size:12px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
 .bd-tb{width:100%;border-collapse:collapse}
 .bd-tb th{text-align:left;font-size:12px;font-weight:700;color:var(--ink-soft);padding:10px 16px;background:#eef0e6;border:1px solid #d7d9cc;white-space:nowrap}
-.bd-tb td{padding:12px 16px;border:1px solid #e3e1d8;font-size:14px;vertical-align:middle}
+.bd-tb td{padding:12px 16px;border:1px solid #e3e1d8;font-size:14px;vertical-align:middle;word-break:break-word}
 .bd-tb .tb-cust{font-weight:800;color:var(--ink)}
 .bd-tb .tb-view{text-align:right;white-space:nowrap}
 .bd-view-btn{border:none;background:var(--pine);color:#fff;border-radius:9px;padding:8px 16px;font-weight:800;font-size:13.5px;cursor:pointer;font-family:inherit}
@@ -1669,7 +1669,7 @@ function refreshBizDash(){
               +'<a href="javascript:void(0)" onclick="'+del+'" style="color:#c0392b;text-decoration:underline;margin-left:12px;font-size:13px">刪除</a></td></tr>';
       }).join("");
       var badge=(showBadge&&arr.length)?' <span class="dp-badge">'+arr.length+'</span>':'';
-      return '<div class="bd-panel"><div class="bd-panel-h">'+title+badge+'</div><div style="overflow-x:auto"><table class="bd-tb"><thead><tr><th>客戶</th><th>車型</th><th>狀態</th><th>時間</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+      return '<div class="bd-panel"><div class="bd-panel-h">'+title+badge+'</div><div style="overflow-x:auto"><table class="bd-tb" style="table-layout:fixed;min-width:820px"><colgroup><col style="width:14%"><col style="width:25%"><col style="width:11%"><col style="width:16%"><col style="width:34%"></colgroup><thead><tr><th>客戶</th><th>車型</th><th>狀態</th><th>時間</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
     };
     di.innerHTML = mkPanel("客戶送來的報價單", items.filter(function(it){return it.type==="sub";}), true, "目前沒有客戶送來的報價單。客戶用你發的代碼送出後，就會出現在這裡。", true)
                  + mkPanel("我自己建的案件", items.filter(function(it){return it.type==="rec";}), false, "目前沒有自己建的案件。按「新增報價」做的報價會出現在這裡。", false);
