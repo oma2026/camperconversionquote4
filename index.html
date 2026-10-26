@@ -593,6 +593,19 @@ body.custmode .cust-exit{display:inline-flex!important}
 
 /* ===== 客戶案件 pipeline (2026-07) ===== */
 #bizCases{max-width:1080px;margin:0 auto;padding:26px 18px 70px}
+#bizCodeView{max-width:900px;margin:0 auto;padding:26px 18px 70px}
+/* 固定左側選單：寬螢幕每頁都在；窄螢幕用上方選單 */
+#bizSideNav{display:none}
+.bd-item[data-side].on{background:var(--pine)}
+.bd-item[data-side].on .bd-navtx b,.bd-item[data-side].on .bd-navtx small{color:#fff}
+.bd-item[data-side].on .bd-navic{background:rgba(255,255,255,.2)}
+@media(min-width:1080px){
+  body.bizsidenav-on #bizSideNav{display:block;position:fixed;top:var(--navtop,64px);left:0;bottom:0;width:238px;background:var(--paper-2);border-right:1px solid var(--line-2);overflow-y:auto;z-index:30;padding:18px 12px}
+  body.bizsidenav-on #bizDash,
+  body.bizsidenav-on #bizMain,
+  body.bizsidenav-on #bizCases,
+  body.bizsidenav-on #bizCodeView{margin-left:238px}
+}
 .bc-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
 .bc-head h2{font-size:23px;font-weight:800;margin:0}
 .bc-ghost{border:1px solid var(--line-2);background:var(--card);color:var(--ink-soft);border-radius:10px;padding:9px 16px;font-weight:700;font-size:14px;cursor:pointer}
@@ -680,30 +693,28 @@ body.custmode .cust-exit{display:inline-flex!important}
     <p style="margin-bottom:18px">請先登入</p>
     <button class="btn-print" style="padding:12px 30px;border-radius:10px;font-weight:800" onclick="openLogin()">登入</button>
   </div>
+  <nav id="bizSideNav">
+    <div class="bd-navgrp">作業</div>
+    <button class="bd-item" data-side="dash" onclick="showBizDash()"><span class="bd-navic">🏠</span><span class="bd-navtx"><b>工作台</b><small>報價單總覽</small></span></button>
+    <button class="bd-item" data-side="new" onclick="bizNewQuote()"><span class="bd-navic">📝</span><span class="bd-navtx"><b>新增報價</b><small>選品項 → 填客戶 → 出報價單</small></span></button>
+    <button class="bd-item" data-side="cases" onclick="openCasesView()"><span class="bd-navic">🗂️</span><span class="bd-navtx"><b>客戶案件</b><small>報價・成交・合約</small></span><span class="bd-navbadge" id="bdSubBadge">0</span></button>
+    <button class="bd-item" data-side="code" onclick="openMyCustCode()"><span class="bd-navic">🔑</span><span class="bd-navtx"><b>我的客戶代碼</b><small>給客戶的登入代碼</small></span></button>
+    <div class="bd-navgrp">帳號</div>
+    <button class="bd-item" onclick="changeMyPin()"><span class="bd-navic">⚙️</span><span class="bd-navtx"><b>帳號設定</b></span></button>
+    <button class="bd-item" onclick="logout()"><span class="bd-navic">🚪</span><span class="bd-navtx"><b>登出</b></span></button>
+  </nav>
   <div id="bizDash" style="display:none">
-    <div class="bd-shell">
-      <aside class="bd-nav">
-        <div class="bd-navgrp">作業</div>
-        <button class="bd-item" onclick="bizNewQuote()"><span class="bd-navic">📝</span><span class="bd-navtx"><b>新增報價</b><small>選品項 → 填客戶 → 出報價單</small></span></button>
-        <button class="bd-item" onclick="openCasesView()"><span class="bd-navic">🗂️</span><span class="bd-navtx"><b>客戶案件</b><small>報價・成交・合約</small></span><span class="bd-navbadge" id="bdSubBadge">0</span></button>
-        <button class="bd-item" onclick="openMyCustCode()"><span class="bd-navic">🔑</span><span class="bd-navtx"><b>我的客戶代碼</b><small>給客戶的登入代碼</small></span></button>
-        <div class="bd-navgrp">帳號</div>
-        <button class="bd-item" onclick="changeMyPin()"><span class="bd-navic">⚙️</span><span class="bd-navtx"><b>帳號設定</b></span></button>
-        <button class="bd-item" onclick="logout()"><span class="bd-navic">🚪</span><span class="bd-navtx"><b>登出</b></span></button>
-      </aside>
-      <section class="bd-main">
-        <div class="bd-hi" id="bdHi">工作台</div>
-        <div class="bd-sub">請選擇要進行的作業</div>
-        <div id="bdInbox"></div>
-      </section>
-    </div>
+    <div class="bd-hi" id="bdHi">工作台</div>
+    <div class="bd-sub">請選擇要進行的作業</div>
+    <div id="bdInbox"></div>
   </div>
-  <div id="bdCodeModal" onclick="if(event.target===this)closeMyCustCode()"><div class="bdc-card">
-    <button onclick="closeMyCustCode()" title="關閉" style="position:absolute;top:10px;right:12px;border:none;background:var(--paper-2);width:32px;height:32px;border-radius:9px;font-size:17px;line-height:1;cursor:pointer;color:var(--ink);display:flex;align-items:center;justify-content:center">✕</button>
-    <h3 style="margin:0 0 6px;font-size:19px">我的客戶代碼</h3>
+  <div id="bizCodeView" style="display:none">
+    <div class="bc-head">
+      <h2>我的客戶代碼</h2>
+      <button class="bc-ghost" onclick="showBizDash()">← 工作台</button>
+    </div>
     <div id="bdCodeBody"></div>
-    <button onclick="closeMyCustCode()" style="width:100%;margin-top:12px;padding:11px;border:1px solid var(--line-2);background:var(--card);color:var(--ink-soft);border-radius:10px;font-weight:700;font-size:14.5px;cursor:pointer">關閉</button>
-  </div></div>
+  </div>
   <div id="bizCases" style="display:none">
     <div class="bc-head">
       <h2>客戶案件</h2>
@@ -1663,26 +1674,39 @@ function refreshBizDash(){
                  + mkPanel("我自己建的案件", items.filter(function(it){return it.type==="rec";}), false, "目前沒有自己建的案件。按「新增報價」做的報價會出現在這裡。", false);
   }
 }
+/* 固定左側選單：只有業務端、非客戶模式才顯示；量上方工具列高度 */
+function syncBizSideNav(){
+  try{ var h=document.querySelector(".topbar"); if(h) document.documentElement.style.setProperty("--navtop", h.offsetHeight+"px");
+    var r=SESSION&&SESSION.role; document.body.classList.toggle("bizsidenav-on", r==="biz" && !document.body.classList.contains("custmode")); }catch(e){}
+}
+function setBizSideActive(key){ try{ var items=document.querySelectorAll('#bizSideNav .bd-item[data-side]'); for(var i=0;i<items.length;i++){ items[i].classList.toggle("on", items[i].getAttribute("data-side")===key); } }catch(e){} }
+try{ window.addEventListener("resize", syncBizSideNav); }catch(e){}
 function showBizDash(){
   if(document.body.classList.contains("custmode"))return;
+  syncBizSideNav(); setBizSideActive("dash");
   var d=document.getElementById("bizDash"); if(d)d.style.display="";
   var m=document.getElementById("bizMain"); if(m)m.style.display="none";
   var c=document.getElementById("bizCases"); if(c)c.style.display="none";
+  var cvw=document.getElementById("bizCodeView"); if(cvw)cvw.style.display="none";
   var mo=document.getElementById("mobar"); if(mo)mo.style.display="none";
   if(typeof closeDeals==="function")closeDeals();
   refreshBizDash(); window.scrollTo(0,0);
 }
 function showBizQuote(){
+  syncBizSideNav();
   var d=document.getElementById("bizDash"); if(d)d.style.display="none";
   var m=document.getElementById("bizMain"); if(m)m.style.display="";
   var c=document.getElementById("bizCases"); if(c)c.style.display="none";
+  var cvw=document.getElementById("bizCodeView"); if(cvw)cvw.style.display="none";
   var mo=document.getElementById("mobar"); if(mo && curMode==="biz")mo.style.display="";
 }
-function bizNewQuote(){ showBizQuote(); if(typeof newQuote==="function")newQuote(); window.scrollTo(0,0); }
+function bizNewQuote(){ showBizQuote(); setBizSideActive("new"); if(typeof newQuote==="function")newQuote(); window.scrollTo(0,0); }
 function openCasesView(){
   if(document.body.classList.contains("custmode"))return;
+  syncBizSideNav(); setBizSideActive("cases");
   var d=document.getElementById("bizDash"); if(d)d.style.display="none";
   var m=document.getElementById("bizMain"); if(m)m.style.display="none";
+  var cvw=document.getElementById("bizCodeView"); if(cvw)cvw.style.display="none";
   var mo=document.getElementById("mobar"); if(mo)mo.style.display="none";
   if(typeof closeDeals==="function")closeDeals();
   var c=document.getElementById("bizCases"); if(c)c.style.display="";
@@ -1703,7 +1727,14 @@ function openMyCustCode(){
       +'<div style="font-size:13px;color:var(--ink-soft);line-height:1.7;margin-top:12px">把代碼給客戶，請他到 <b>https://oma2026.github.io/vipentry/</b> 輸入代碼即可（不用打名字）。送出的單會進你的「客戶案件」。</div>';
     renderCamperCodes();
   }
-  document.getElementById("bdCodeModal").style.display="flex";
+  /* 整頁顯示（不是彈窗） */
+  var d=document.getElementById("bizDash"); if(d)d.style.display="none";
+  var m=document.getElementById("bizMain"); if(m)m.style.display="none";
+  var c=document.getElementById("bizCases"); if(c)c.style.display="none";
+  var mo=document.getElementById("mobar"); if(mo)mo.style.display="none";
+  syncBizSideNav(); setBizSideActive("code");
+  var cv=document.getElementById("bizCodeView"); if(cv)cv.style.display="";
+  window.scrollTo(0,0);
 }
 function renderCamperCodes(){
   var wrap=document.getElementById("camperCodeList"); if(!wrap) return;
@@ -1739,8 +1770,8 @@ function camperAddCode(){
 }
 function camperToggleCode(code, active){ setCamperVipActive(currentRep, code, active); renderCamperCodes(); }
 function camperCopyCode(code){ try{ navigator.clipboard.writeText(code); toast("已複製代碼"); }catch(e){ toast(code); } }
-function camperViewSub(subId){ closeMyCustCode(); if(typeof importSubmission==="function") importSubmission(subId); }
-function closeMyCustCode(){ document.getElementById("bdCodeModal").style.display="none"; }
+function camperViewSub(subId){ var cv=document.getElementById("bizCodeView"); if(cv)cv.style.display="none"; if(typeof importSubmission==="function") importSubmission(subId); }
+function closeMyCustCode(){ var cv=document.getElementById("bizCodeView"); if(cv)cv.style.display="none"; if(typeof showBizDash==="function") showBizDash(); }
 /* ===== 客戶案件 pipeline 渲染 (2026-07) ===== */
 function _caseItemsCamper(){
   var out=[];
@@ -1903,6 +1934,7 @@ function applyRole(){
   const gr=document.querySelector(".gear");if(gr)gr.style.display=isAdmin?"":"none";
   updateInboxBtn();
   updateTopLogout();
+  if(typeof syncBizSideNav==="function") syncBizSideNav();
 }
 function routeToRole(){
   const role=SESSION&&SESSION.role;
@@ -2231,6 +2263,7 @@ function startCustomer(){
   SESSION.custLogins.push(loginEntry);
   saveSession();fbSaveCustLogin(loginEntry);
   document.body.classList.add("custmode");
+  if(typeof syncBizSideNav==="function") syncBizSideNav();   // 客戶模式 → 隱藏業務側欄
   setMode("biz");
   currentRep=rep;
   quote={};                 // 客戶用暫存清單（記憶體，不動到業務的報價單）
