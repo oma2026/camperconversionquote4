@@ -289,6 +289,12 @@ body.custmode .biz-subtabs{display:none!important}
 #entryLogo img{height:30px;width:auto;display:block}
 .modal-card{background:var(--paper);border-radius:16px;max-width:720px;width:100%;padding:22px 24px 28px;box-shadow:0 24px 70px rgba(0,0,0,.35);position:relative}
 .modal-close{position:absolute;top:12px;right:14px;background:none;border:none;font-size:22px;line-height:1;cursor:pointer;color:var(--ink-soft)}
+.k-items{border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.k-items .k-item{display:flex;justify-content:space-between;gap:12px;align-items:baseline;padding:8px 12px;font-size:13px;border-top:1px solid #efeee7}
+.k-items .k-item:first-child{border-top:0;font-weight:800;background:#f6f5ee;font-size:14px}
+.k-items .k-pr{color:var(--ink-soft);white-space:nowrap;font-variant-numeric:tabular-nums}
+.k-items .k-empty{padding:10px 12px;color:var(--ink-soft);font-size:13px}
+.bc-lb{display:block;font-size:13px;font-weight:800;color:var(--ink-soft);margin:12px 0 5px}
 .deal-wrap input{width:100%;box-sizing:border-box;border:1.5px solid var(--amber);border-radius:8px;padding:9px 11px;font-size:17px;text-align:right;font-variant-numeric:tabular-nums;background:#fffdf6;color:var(--ink)}
 .deal-wrap input:focus{outline:2px solid var(--amber);outline-offset:-1px;background:#fff}
 .qline .l3{display:flex;justify-content:space-between;align-items:baseline}
@@ -582,8 +588,9 @@ body.custmode .cust-exit{display:inline-flex!important}
 .bd-panel-h{display:flex;align-items:center;gap:10px;padding:14px 18px;font-size:16px;font-weight:800;color:var(--ink);border-bottom:1px solid var(--line);background:var(--paper-2)}
 .bd-panel-h .dp-badge{min-width:22px;height:22px;padding:0 8px;border-radius:11px;background:var(--pine);color:#fff;font-size:12px;font-weight:800;display:inline-flex;align-items:center;justify-content:center}
 .bd-tb{width:100%;border-collapse:collapse}
-.bd-tb th{text-align:left;font-size:12px;font-weight:700;color:var(--ink-soft);padding:10px 16px;background:#eef0e6;border:1px solid #d7d9cc;white-space:nowrap}
+.bd-tb th{text-align:left;font-size:12px;font-weight:800;color:#2f4f32;padding:10px 16px;background:#e9f3e4;border:1px solid #cfe0c6;border-top:2px solid #3f9150;white-space:nowrap}
 .bd-tb td{padding:12px 16px;border:1px solid #e3e1d8;font-size:14px;vertical-align:middle;word-break:break-word}
+.bd-tb tbody tr:nth-child(even) td{background:#f7faf5}
 .bd-tb .tb-cust{font-weight:800;color:var(--ink)}
 .bd-tb .tb-view{text-align:right;white-space:nowrap}
 .bd-view-btn{border:none;background:var(--pine);color:#fff;border-radius:9px;padding:8px 16px;font-weight:800;font-size:13.5px;cursor:pointer;font-family:inherit}
@@ -813,6 +820,25 @@ body.custmode .cust-exit{display:inline-flex!important}
   </div>
 </div>
 
+<div id="bizContractModal" class="modal-back" style="display:none;z-index:340" onclick="if(event.target===this)closeBizContract()">
+  <div class="modal-card" style="max-width:520px;max-height:90vh;overflow:auto">
+    <button class="modal-close" onclick="closeBizContract()">✕</button>
+    <h2 style="font-size:21px;margin-bottom:4px">合約書資料</h2>
+    <p style="color:var(--ink-soft);font-size:13.5px;margin-bottom:6px">確認車型、配備、車身與成交價，就能列印合約書給客戶簽。</p>
+    <label class="bc-lb" style="margin-top:4px">車型與選購配備（請確認）</label>
+    <div id="bc_items" class="k-items"></div>
+    <label class="bc-lb">車身號碼</label>
+    <input id="bc_vin" class="lock-sel" placeholder="留空印「客製化新車（待生產）」">
+    <label class="bc-lb">成交價（NT$）</label>
+    <input id="bc_price" class="lock-sel" type="number" step="1000" placeholder="留空＝用目前報價金額">
+    <label class="bc-lb">付款方式</label>
+    <select id="bc_pay" class="lock-sel"><option value="">請選擇</option><option value="現金">現金</option><option value="匯款">匯款</option><option value="刷卡">刷卡</option><option value="分期">分期</option></select>
+    <div style="display:flex;gap:10px;margin-top:16px">
+      <button class="abtn" style="flex:1" onclick="closeBizContract()">取消</button>
+      <button class="pbtn" style="flex:2" onclick="confirmBizContract()">列印合約書</button>
+    </div>
+  </div>
+</div>
 <div id="myLoginModal" class="modal-back" style="display:none;z-index:320" onclick="if(event.target===this)closeMyLogins()">
   <div class="modal-card" style="max-width:560px;max-height:80vh;overflow:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -1656,20 +1682,19 @@ function refreshBizDash(){
     var mkPanel=function(title, arr, isSub, empty, showBadge){
       if(!arr.length) return '<div class="bd-panel"><div class="bd-panel-h">'+title+'</div><div class="bd-empty">'+empty+'</div></div>';
       var rows=arr.map(function(it){
-        var k=caseStageCamper(it), label=caseStageLabelCamper(k);
-        var color=(k==="submitted")?"#b23b2e":((k==="dealt"||k==="ordered")?"#2f7d4f":"#a86a12");
+        var k=caseStageCamper(it);
         var act=isSub?("importSubmission('"+it.id+"')"):("editRecord('"+it.id+"')");
         var del=isSub?("deleteSubmission('"+it.id+"');refreshBizDash()"):("deleteRecord('"+it.id+"');refreshBizDash()");
         var docs=isSub?"":('<a href="javascript:void(0)" onclick="reprintRecord(\''+it.id+'\')" style="color:#1a56c6;text-decoration:underline;margin-right:10px;font-size:13px">報價單</a>'
                           +'<a href="javascript:void(0)" onclick="caseGenContract(\''+it.id+'\')" style="color:#1a56c6;text-decoration:underline;margin-right:12px;font-size:13px">合約</a>');
+        var wonBtn=(!isSub && k!=="dealt" && k!=="ordered")?('<a href="javascript:void(0)" onclick="markCamperDealWon(\''+it.id+'\')" style="color:#1b6e3a;text-decoration:underline;margin-left:12px;font-size:13px">已成交</a>'):'';
         return '<tr><td class="tb-cust">'+esc(it.cust||"（未填客戶）")+'</td><td>'+esc(it.car||"—")+'</td>'
-              +'<td style="white-space:nowrap"><b style="color:'+color+'">'+esc(label)+'</b></td>'
               +'<td style="color:var(--ink-soft);white-space:nowrap">'+fmtTs(it.ts)+'</td>'
-              +'<td style="text-align:right;white-space:nowrap">'+docs+'<button class="bd-view-btn" onclick="'+act+'">檢視</button>'
+              +'<td style="text-align:right;white-space:nowrap">'+docs+'<button class="bd-view-btn" onclick="'+act+'">檢視</button>'+wonBtn
               +'<a href="javascript:void(0)" onclick="'+del+'" style="color:#c0392b;text-decoration:underline;margin-left:12px;font-size:13px">刪除</a></td></tr>';
       }).join("");
       var badge=(showBadge&&arr.length)?' <span class="dp-badge">'+arr.length+'</span>':'';
-      return '<div class="bd-panel"><div class="bd-panel-h">'+title+badge+'</div><div style="overflow-x:auto"><table class="bd-tb" style="table-layout:fixed;min-width:820px"><colgroup><col style="width:14%"><col style="width:25%"><col style="width:11%"><col style="width:16%"><col style="width:34%"></colgroup><thead><tr><th>客戶</th><th>車型</th><th>狀態</th><th>時間</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+      return '<div class="bd-panel"><div class="bd-panel-h">'+title+badge+'</div><div style="overflow-x:auto"><table class="bd-tb" style="table-layout:fixed;min-width:760px"><colgroup><col style="width:15%"><col style="width:28%"><col style="width:17%"><col style="width:40%"></colgroup><thead><tr><th>客戶</th><th>車型</th><th>時間</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
     };
     di.innerHTML = mkPanel("客戶送來的報價單", items.filter(function(it){return it.type==="sub";}), true, "目前沒有客戶送來的報價單。客戶用你發的代碼送出後，就會出現在這裡。", true)
                  + mkPanel("我自己建的案件", items.filter(function(it){return it.type==="rec";}), false, "目前沒有自己建的案件。按「新增報價」做的報價會出現在這裡。", false);
@@ -1820,10 +1845,10 @@ function caseMoreCamper(it){
   return '<details class="case-more"><summary>⋯ 其他</summary><div class="case-menu">'+m.join('')+'</div></details>';
 }
 function caseStepsCamper(k){
-  /* 五格進度：報價 → 合約 → 訂金 → 成交 → 完成。done=已完成格數、now=目前格 */
-  var labels=['報價','合約','訂金','成交','完成'];
+  /* 三格進度：報價 → 簽約收訂 → 已成交。done=已完成格數、now=目前格 */
+  var labels=['報價','簽約收訂','已成交'];
   var st=({submitted:{done:0,now:0},quoted:{done:1,now:1},contract:{done:1,now:1},
-           awaiting:{done:2,now:2},dealt:{done:4,now:4},ordered:{done:5,now:-1}})[k]||{done:0,now:0};
+           awaiting:{done:1,now:1},dealt:{done:2,now:2},ordered:{done:3,now:-1}})[k]||{done:0,now:0};
   return '<div class="case-steps">'+labels.map(function(t,i){
     var cls=i<st.done?'done':(i===st.now?'now':'');
     return '<div class="case-step '+cls+'">'+t+'</div>';
@@ -1870,11 +1895,59 @@ function caseCardCamper(it){
     +caseStepsCamper(k)
     +(money?'<div class="case-money">'+money+'</div>':'')+inner+'</div>';
 }
-function caseGenContract(recordId){
-  var r=(SESSION.records||[]).find(function(x){return x.id===recordId;}); if(!r)return;
+var _bizContractId=null, _bizContractPriceOverride=null;
+/* 列印合約前先跳確認視窗（跟新車報價一樣）：確認車型／配備／車身／成交價／付款方式，再列印 */
+function caseGenContract(recordId){ openBizContract(recordId); }
+function openBizContract(recordId){
+  var r=(SESSION.records||[]).find(function(x){return x.id===recordId;}); if(!r){toast("找不到這筆紀錄");return;}
+  _bizContractId=recordId;
+  var ib=document.getElementById("bc_items");
+  if(ib){
+    var parts=[];
+    var carName=(r.cust&&r.cust.car&&r.cust.car!=="—")?r.cust.car:"";
+    if(carName) parts.push('<div class="k-item"><span>🚗 '+esc(carName)+'</span><span class="k-pr"></span></div>');
+    (r.items||[]).forEach(function(it){
+      var amt=(it.lineTotal==null)?"報價另計":("NT$ "+fmt(Math.round(Number(it.lineTotal)||0)));
+      var nm='・'+esc(it.name)+(it.model?' <span style="color:var(--ink-soft)">'+esc(it.model)+'</span>':'')+((it.qty>1)?' ×'+it.qty:'');
+      parts.push('<div class="k-item"><span>'+nm+'</span><span class="k-pr">'+amt+'</span></div>');
+    });
+    ib.innerHTML=parts.length?parts.join(""):'<div class="k-empty">此案件沒有可顯示的車型／配備</div>';
+  }
+  var pv=document.getElementById("bc_vin"); if(pv) pv.value=(r.cust&&r.cust.vin)||"";
+  var pp=document.getElementById("bc_price"); if(pp) pp.value=(r.deal!=null&&r.deal>0)?String(r.deal):(r.total?String(r.total):"");
+  var pm=document.getElementById("bc_pay"); if(pm) pm.value=r.payMethod||"";
+  var m=document.getElementById("bizContractModal"); if(m) m.style.display="flex";
+}
+function closeBizContract(){ var m=document.getElementById("bizContractModal"); if(m) m.style.display="none"; }
+function confirmBizContract(){
+  var recordId=_bizContractId; if(!recordId){ closeBizContract(); return; }
+  var r=(SESSION.records||[]).find(function(x){return x.id===recordId;}); if(!r){ closeBizContract(); return; }
+  var vin=((document.getElementById("bc_vin")||{}).value||"").trim();
+  r.cust=r.cust||{}; r.cust.vin=vin;
+  var raw=String(((document.getElementById("bc_price")||{}).value)||"").replace(/[,\s]/g,"");
+  var pvn=Math.round(+raw); _bizContractPriceOverride=(raw!==""&&isFinite(pvn)&&pvn>0)?pvn:null;
+  var pm=((document.getElementById("bc_pay")||{}).value)||""; r.payMethod=pm;
+  saveSession();
+  if(typeof fbUpdateRecord==="function")fbUpdateRecord(recordId,{cust:r.cust,payMethod:pm});
+  closeBizContract();
   if(typeof printContractDoc==="function")printContractDoc(recordId);
   if(!r.contractGenerated){ r.contractGenerated=true; saveSession(); if(typeof fbUpdateRecord==="function")fbUpdateRecord(recordId,{contractGenerated:true}); }
   refreshRecViews();
+}
+/* 工作台直接標記成交：問成交價（預設帶報價金額），把這筆標成「已成交」 */
+function markCamperDealWon(recordId){
+  var r=(SESSION.records||[]).find(function(x){return x.id===recordId;}); if(!r){toast("找不到這筆紀錄");return;}
+  if(!_bizGuard("won"+recordId,500))return;
+  var def=(r.deal!=null&&r.deal>0)?r.deal:(r.total||0);
+  var inp=prompt("成交價（NT$）\n直接按「確定」＝用目前報價金額；有議價請改成實際成交價。", String(def));
+  if(inp===null) return;
+  var dp=Math.round(+String(inp).replace(/[,\s]/g,"")); if(!(isFinite(dp)&&dp>0)) dp=def;
+  r.deal=dp; r.confirmed=true;
+  saveSession();
+  if(typeof fbUpdateRecord==="function")fbUpdateRecord(recordId,{deal:r.deal,confirmed:true});
+  if(typeof refreshRecViews==="function")refreshRecViews();
+  if(typeof refreshBizDash==="function")refreshBizDash();
+  toast("已標記成交，成交價 NT$"+dp.toLocaleString("en-US"));
 }
 function caseUploadSigned(recordId,input){
   if(!(input&&input.files&&input.files[0]))return;
@@ -3058,7 +3131,8 @@ function printContractDoc(recordId){
   if(!r){toast("找不到這筆紀錄");return;}
   if(!_bizGuard("contract"+recordId,800))return;
   const listTotal=Number(r.total)||0;
-  const total=(r.deal!=null&&r.deal>0)?Number(r.deal):listTotal;   // 合約總價＝成交價（未填則帶報價金額）
+  const _ov=_bizContractPriceOverride; _bizContractPriceOverride=null;   // 合約視窗填的成交價，只套用這一次
+  const total=(_ov!=null&&_ov>0)?_ov:((r.deal!=null&&r.deal>0)?Number(r.deal):listTotal);   // 合約總價＝成交價（未填則帶報價金額）
   const dealDiscount=Math.max(0,listTotal-total);                  // 議價折讓
   const nt=n=>"NT$ "+fmt(Math.round(Number(n)||0));
   const U="＿＿＿＿＿＿";
