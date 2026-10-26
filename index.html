@@ -1696,12 +1696,11 @@ function refreshBizDash(){
         var quoteBtn='<a href="javascript:void(0)" onclick="'+(isSub?'subQuote':'reprintRecord')+'(\''+id+'\')" style="'+lnk+'">報價單</a>';
         var contractBtn='<a href="javascript:void(0)" onclick="'+(isSub?'subContract':'caseGenContract')+'(\''+id+'\')" style="'+lnk+'">合約</a>';
         var viewBtn='<button class="bd-view-btn" onclick="'+(isSub?("importSubmission('"+id+"')"):("editRecord('"+id+"')"))+'">檢視</button>';
-        var wonBtn=(isSub||(k!=="dealt"&&k!=="ordered"))?'<a href="javascript:void(0)" onclick="'+(isSub?'subWon':'markCamperDealWon')+'(\''+id+'\')" style="color:#1b6e3a;text-decoration:underline;margin-left:12px;font-size:13px">已成交</a>':'';
-        var uploadBtn='<label style="color:#8a6d1b;text-decoration:underline;margin-left:12px;font-size:13px;cursor:pointer">上傳<input type="file" accept="application/pdf,image/*" style="display:none" onchange="'+(isSub?'subUpload':'caseUploadSigned')+'(\''+id+'\',this)"></label>';
+        var wonBtn='<label style="color:#1b6e3a;text-decoration:underline;margin-left:12px;font-size:13px;cursor:pointer" title="標記成交並上傳客戶簽名合約">已成交（上傳）<input type="file" accept="application/pdf,image/*" style="display:none" onchange="'+(isSub?'subWonUpload':'wonUpload')+'(\''+id+'\',this)"></label>';
         var del=isSub?("deleteSubmission('"+id+"');refreshBizDash()"):("deleteRecord('"+id+"');refreshBizDash()");
         return '<tr><td class="tb-cust">'+esc(it.cust||"（未填客戶）")+'</td><td>'+esc(it.car||"—")+'</td>'
               +'<td style="color:var(--ink-soft);white-space:nowrap">'+fmtTs(it.ts)+'</td>'
-              +'<td style="text-align:right;white-space:nowrap">'+quoteBtn+contractBtn+viewBtn+wonBtn+uploadBtn
+              +'<td style="text-align:right;white-space:nowrap">'+quoteBtn+contractBtn+viewBtn+wonBtn
               +'<a href="javascript:void(0)" onclick="'+del+'" style="color:#c0392b;text-decoration:underline;margin-left:12px;font-size:13px">刪除</a></td></tr>';
       }).join("");
       var badge=(showBadge&&arr.length)?' <span class="dp-badge">'+arr.length+'</span>':'';
@@ -1977,7 +1976,20 @@ function subAct(id, action){ var r=_subToRecord(_findSub(id)); if(r&&typeof acti
 function subQuote(id){ subAct(id,function(r){ reprintRecord(r.id); }); }
 function subContract(id){ subAct(id,function(r){ caseGenContract(r.id); }); }
 function subWon(id){ subAct(id,function(r){ markCamperDealWon(r.id); }); }
-function subUpload(id,input){ var r=_subToRecord(_findSub(id)); if(r){ caseUploadSigned(r.id,input); } if(typeof refreshBizDash==="function")refreshBizDash(); }
+/* 一顆「已成交（上傳）」：選簽名合約檔→存檔＋標記成交（confirmed）＋同步雲端，採購／出納／會計就看得到 */
+function wonUpload(recordId,input){
+  if(!(input&&input.files&&input.files[0]))return;
+  var r=(SESSION.records||[]).find(function(x){return x.id===recordId;}); if(!r){toast("找不到這筆紀錄");return;}
+  if(typeof onContractPick==="function")onContractPick(recordId,input);   // 存合約檔（非同步）＋設 hasContract
+  if(r.deal==null||r.deal===0) r.deal=r.total;
+  r.confirmed=true;
+  saveSession();
+  if(typeof fbUpdateRecord==="function")fbUpdateRecord(recordId,{deal:r.deal,confirmed:true});
+  if(typeof refreshRecViews==="function")refreshRecViews();
+  if(typeof refreshBizDash==="function")refreshBizDash();
+  toast("已成交並上傳簽名合約，採購／出納／會計都看得到了");
+}
+function subWonUpload(id,input){ var r=_subToRecord(_findSub(id)); if(r){ wonUpload(r.id,input); } }
 /* 工作台直接標記成交：問成交價（預設帶報價金額），把這筆標成「已成交」 */
 function markCamperDealWon(recordId){
   var r=(SESSION.records||[]).find(function(x){return x.id===recordId;}); if(!r){toast("找不到這筆紀錄");return;}
