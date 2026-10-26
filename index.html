@@ -703,8 +703,9 @@ body.custmode .cust-exit{display:inline-flex!important}
     <div class="bd-navgrp">作業</div>
     <button class="bd-item" data-side="dash" onclick="showBizDash()"><span class="bd-navic">🏠</span><span class="bd-navtx"><b>工作台</b><small>報價單總覽</small></span></button>
     <button class="bd-item" data-side="new" onclick="bizNewQuote()"><span class="bd-navic">📝</span><span class="bd-navtx"><b>新增報價</b><small>選品項 → 填客戶 → 出報價單</small></span></button>
-    <button class="bd-item" data-side="cases" onclick="openCasesView()"><span class="bd-navic">🗂️</span><span class="bd-navtx"><b>客戶案件</b><small>報價・成交・合約</small></span><span class="bd-navbadge" id="bdSubBadge">0</span></button>
     <button class="bd-item" data-side="code" onclick="openMyCustCode()"><span class="bd-navic">🔑</span><span class="bd-navtx"><b>我的客戶代碼</b><small>給客戶的登入代碼</small></span></button>
+    <div class="bd-navgrp">切換系統</div>
+    <button class="bd-item" onclick="switchToNewcar()"><span class="bd-navic">🔄</span><span class="bd-navtx"><b>新車報價</b><small>切換到新車報價系統</small></span></button>
     <div class="bd-navgrp">帳號</div>
     <button class="bd-item" onclick="changeMyPin()"><span class="bd-navic">⚙️</span><span class="bd-navtx"><b>帳號設定</b></span></button>
     <button class="bd-item" onclick="logout()"><span class="bd-navic">🚪</span><span class="bd-navtx"><b>登出</b></span></button>
@@ -1707,6 +1708,14 @@ function syncBizSideNav(){
 }
 function setBizSideActive(key){ try{ var items=document.querySelectorAll('#bizSideNav .bd-item[data-side]'); for(var i=0;i<items.length;i++){ items[i].classList.toggle("on", items[i].getAttribute("data-side")===key); } }catch(e){} }
 try{ window.addEventListener("resize", syncBizSideNav); }catch(e){}
+/* 一鍵切換到新車報價系統（同網域，帶身分過去自動登入，不用重打密碼） */
+function switchToNewcar(){
+  try{
+    var u = (SESSION&&SESSION.role==="biz")?(SESSION.bizRep||""):(SESSION&&SESSION.role==="admin")?"darren":(SESSION&&SESSION.role==="acct")?"accounting01":(SESSION&&SESSION.role==="cashier")?"accounting10":"";
+    if(u) sessionStorage.setItem("oma_staff_handoff", JSON.stringify({name:u, pw:"123", ts:Date.now()}));
+  }catch(e){}
+  location.href="https://oma2026.github.io/caterhamsunlight5/#staff";
+}
 function showBizDash(){
   if(document.body.classList.contains("custmode"))return;
   syncBizSideNav(); setBizSideActive("dash");
@@ -1987,7 +1996,7 @@ function updateBizPill(){
   if(!show){pill.innerHTML="";return;}
   let who="",btns="";
   if(role==="biz"){const rp=REPS[currentRep]||{};who="業務："+(rp.title?rp.title+" ":"")+(rp.zh?rp.zh+" ":"")+currentRep;
-    btns=`<button onclick="showBizDash()">🏠 工作台</button><button onclick="openCasesView()">客戶案件</button><button onclick="openMyLogins()">客戶登入</button><button onclick="changeMyPin()">改密碼</button>`;}
+    btns=`<button onclick="showBizDash()">🏠 工作台</button><button onclick="openMyLogins()">客戶登入</button><button onclick="changeMyPin()">改密碼</button>`;}
   else{who="身分："+({admin:"管理後台",buyer:"採購",acct:"會計",tech:"技術",cashier:"出納"}[role]||role);
     if(role!=="admin")btns=`<button onclick="changeRolePin('${role}')">改密碼</button>`;}
   pill.innerHTML=`<span id="pillWho">${who}</span>${btns}`;
