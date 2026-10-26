@@ -783,6 +783,9 @@ body.custmode .cust-exit{display:inline-flex!important}
       <button class="btn-clear" onclick="saveQuote()">儲存報價</button>
       <button class="btn-print" onclick="printQuote()">列印報價單</button>
     </div>
+    <div class="biz-actions" style="margin-top:8px">
+      <button class="btn-print" onclick="sendToPurchase()" style="width:100%;background:#2f7d4f;border-color:#2f7d4f">📦 傳給採購（採購部門就看得到）</button>
+    </div>
     <div class="qactions cust-actions">
       <button class="btn-print" style="flex:1" onclick="submitCustomer()">完成，送出給業務</button>
     </div>
@@ -2096,43 +2099,16 @@ function tryLogin(){
   else { const _rk=(typeof SALES!=="undefined"?SALES:[]).find(k=>String(k).toLowerCase()===_low && k!=="業務共用"); if(!_rk){ err.textContent="找不到這個名字"; return; } v="rep:"+_rk; }
   const pw=(document.getElementById("bizPw").value||"").trim();
   if(!pw){err.textContent="請輸入密碼";return;}
-  if(window.fbAuth){
-    /* 個人原本的 Firebase 密碼仍可登入（維持相容）；驗不過時若打 123／123456／本機密碼，就改用本機登入＋共用帳號連雲端 */
-    const email=v.startsWith("rep:")?staffEmailForRep(v.slice(4)):staffEmailForRole(v.slice(5));
-    err.textContent="驗證中…";
-    window.fbStaffLogin(email,pw).then(()=>{
-      if(v.startsWith("rep:")){const r=v.slice(4);SESSION.role="biz";SESSION.bizRep=r;SESSION.rep=r;}
-      else{SESSION.role=v.slice(5);}
-      try{localStorage.setItem(SESS_KEY,JSON.stringify(SESSION));}catch(e){}
-      err.textContent="登入成功，載入中…";
-      _ensureSharedCloudAccount();   // 背景把共用帳號建好（成功才記旗標，沒完成下次登入會重試），之後大家用 123 也能存雲端
-      setTimeout(()=>location.reload(),600);
-    }).catch((e)=>{
-      if(_bizLocalPwOK(v,pw)){   // 個人密碼不對，但打的是 123／123456／本機密碼 → 本機登入＋共用帳號連雲端
-        err.textContent="登入中…";
-        if(v.startsWith("rep:")){const r=v.slice(4);SESSION.role="biz";SESSION.bizRep=r;SESSION.rep=r;}
-        else{SESSION.role=v.slice(5);}
-        try{localStorage.setItem(SESS_KEY,JSON.stringify(SESSION));}catch(_e){}
-        _bizSharedCloudLogin().finally(function(){ setTimeout(()=>location.reload(),150); });   // 存好身分、連上共用帳號後重載；boot 會從 SESSION 回復登入
-      }else{ err.textContent=fbLoginErrText(e); }
-    });
-    return;
-  }
-  /* 離線備援：Firebase 起不來（無網路等）時退回舊的本機密碼比對 */
-  if(v.startsWith("rep:")){
-    const r=v.slice(4);
-    if(pw===(DB.repPins&&DB.repPins[r])){
-      SESSION.role="biz";SESSION.bizRep=r;currentRep=r;quote=SESSION.quotes[currentRep];saveSession();
-      loadCust();loadDeal();renderDealStatus();renderReps();renderCatalog();renderQuote();
-    }else{err.textContent="密碼錯誤";return;}
-  }else{
-    const role=v.slice(5);
-    const key={admin:"adminPin",buyer:"buyerPin",acct:"acctPin",tech:"techPin",cashier:"cashierPin"}[role];
-    if(pw!==DB[key]){err.textContent="密碼錯誤";return;}
-    SESSION.role=role;saveSession();
-  }
-  err.textContent="";document.getElementById("bizPw").value="";
-  applyRole();closeLogin();routeToRole();updateBizPill();
+  /* 純本機密碼（以管理後台設定的為準，預設 123）；雲端寫入走匿名通行證，不用個人 Firebase 帳號 */
+  var isRep=v.startsWith("rep:"), rep=isRep?v.slice(4):null, role=isRep?null:v.slice(5), expected;
+  if(isRep){ expected=(DB.repPins&&DB.repPins[rep])||"123"; }
+  else { var key={admin:"adminPin",buyer:"buyerPin",acct:"acctPin",tech:"techPin",cashier:"cashierPin"}[role]; expected=DB[key]||"123"; }
+  if(pw!==expected){ err.textContent="密碼錯誤"; return; }
+  if(isRep){ SESSION.role="biz"; SESSION.bizRep=rep; SESSION.rep=rep; }
+  else { SESSION.role=role; }
+  try{localStorage.setItem(SESS_KEY,JSON.stringify(SESSION));}catch(e){}
+  document.getElementById("bizPw").value=""; err.textContent="登入中…";
+  setTimeout(function(){location.reload();},100);
 }
 /* ===== 自動登出：閒置 10 分鐘 或 登入滿 1 小時 ===== */
 var _idleTimer=null,_absTimer=null,_autoOn=false;
@@ -2239,6 +2215,19 @@ function changeRolePin(role){
   const np=prompt("設定新密碼：");if(np==null)return;
   const v=np.trim();if(!v){alert("密碼不可空白");return;}
   DB[key]=v;saveDB();toast("密碼已更新");
+}
+/* 管理後台：看＋改各角色／各業務的登入密碼（存 DB、同步雲端） */
+function savePinRole(key){
+  var el=document.getElementById("pwrole_"+key); if(!el)return;
+  var v=(el.value||"").trim(); if(!v){alert("密碼不可空白");return;}
+  DB[key]=v; saveDB(); toast("密碼已更新");
+}
+function savePinRep(repKey){
+  var el=document.getElementById("pwrep_"+repKey); if(!el)return;
+  var v=(el.value||"").trim(); if(!v){alert("密碼不可空白");return;}
+  DB.repPins=DB.repPins||{}; DB.repPins[repKey]=v;
+  if(repKey==="業務共用"){ DB.sales=DB.sales||{}; DB.sales.sharedPin=v; }
+  saveDB(); toast("密碼已更新");
 }
 function setMode(m){
   curMode=m;
@@ -2407,12 +2396,12 @@ function openCustomerFromHandoff(h){
     pickCustomer();   // 開客戶資料視窗 + 帶入可選車型
     window._handoff={pin:(h.pass||"").trim().toLowerCase(), rep:h.rep||null};
     // 入口頁已填過姓名+密碼 → 這裡把這兩欄藏起來，客戶只要選車型
-    /* 入口頁真的有帶名字才把姓名欄藏起來；名字是空的就讓客戶自己填，避免送出空白名字。 */
-    var nm=document.getElementById("ciName"); if(nm){ nm.value=(h.name||"").trim(); if(nm.value){ nm.style.display="none"; if(nm.previousElementSibling)nm.previousElementSibling.style.display="none"; } }
+    /* 客戶稱呼一律留空、欄位顯示，讓客戶自己打名字（不要帶業務/共用的名字進來） */
+    var nm=document.getElementById("ciName"); if(nm){ nm.value=""; nm.style.display=""; if(nm.previousElementSibling)nm.previousElementSibling.style.display=""; }
     var pin=document.getElementById("ciPin"); if(pin){ pin.value=(h.pass||"").trim(); pin.style.display="none"; if(pin.previousElementSibling)pin.previousElementSibling.style.display="none"; }
     var modal=document.getElementById("custInfoModal");
     if(modal){
-      var h2=modal.querySelector("h2"); if(h2)h2.textContent="歡迎，"+((h.name||"").trim()||"貴賓")+"！";
+      var h2=modal.querySelector("h2"); if(h2)h2.textContent="歡迎，貴賓！";
       var sub=modal.querySelector("p"); if(sub)sub.textContent="請選擇您選購的車型，即可開始挑選配。";
       var back=modal.querySelector("button.abtn"); if(back)back.style.display="none";   // 從入口頁進來，不用返回員工閘門
     }
@@ -2971,6 +2960,17 @@ function saveQuote(){
   const car=document.getElementById("cCar").value||"—";
   recordQuote(name,car);refreshRecViews();toast("已儲存報價");
 }
+function sendToPurchase(){
+  if(!Object.keys(quote).length){toast("報價單是空的");return;}
+  if(!_bizRequireName())return;
+  if(!_bizGuard("sendPurchase"))return;
+  const name=document.getElementById("cName").value||"—";
+  const car=document.getElementById("cCar").value||"—";
+  const rec=recordQuote(name,car);
+  if(rec){ rec.toPurchase=true; rec.toPurchaseTs=Date.now(); saveSession(); if(typeof fbUpdateRecord==="function")fbUpdateRecord(rec.id,{toPurchase:true}); }
+  refreshRecViews();
+  toast("已傳給採購，採購部門看得到了");
+}
 function newQuote(){
   editingRecordId=null;
   if(Object.keys(quote).length && _bizName()){
@@ -3480,8 +3480,8 @@ function renderAcct(){
     <tfoot><tr><td>合計</td><td></td><td></td><td class="num"><b>NT$${fmt(quoteSum)}</b></td><td class="num"><b>NT$${fmt(rev)}</b></td><td class="num"><b>NT$${fmt(cost)}</b></td><td class="num"><b>NT$${fmt(profit)}</b></td><td class="num"><b>${mp.toFixed(0)}%</b></td><td></td></tr></tfoot></table>`;
 }
 function buyerOrders(){
-  // 列出每一筆「已成交」的紀錄（不再依客戶去重複）
-  return (SESSION.records||[]).filter(r=>r.confirmed);
+  // 列出「已成交」或業務按「傳給採購」送來的紀錄
+  return (SESSION.records||[]).filter(r=>r.confirmed || r.toPurchase);
 }
 function renderBuyer(){
   const p=document.getElementById("buyerPanel");
@@ -3644,16 +3644,17 @@ function recordQuote(name,car){
     const ex=(SESSION.records||[]).find(r=>r.id===editingRecordId);
     editingRecordId=null;
     if(ex){ex.items=items;ex.total=total;ex.totalCost=totalCost;ex.cust={name:name||"—",car:car||"—",vin:vin};ex.ts=Date.now();
-      saveSession();fbSaveRecord(ex);if(unlocked)renderAdmin();if(dealModalOpen)renderDeals();return;}
+      saveSession();fbSaveRecord(ex);if(unlocked)renderAdmin();if(dealModalOpen)renderDeals();return ex;}
   }
   const last=SESSION.records[0];
   const sig=r=>r?[r.rep,r.total,r.items.length,r.cust.name,r.cust.car,r.cust.vin||""].join("|"):"";
-  if(last&&Date.now()-last.ts<60000&&sig(last)===sig(rec))return; // 60秒內同內容不重複記（保留原本成交狀態）
+  if(last&&Date.now()-last.ts<60000&&sig(last)===sig(rec))return last; // 60秒內同內容不重複記（保留原本成交狀態）
   SESSION.records.unshift(rec);
   if(SESSION.records.length>500)SESSION.records.length=500;
   saveSession();fbSaveRecord(rec);
   if(unlocked)renderAdmin();
   if(dealModalOpen)renderDeals();
+  return rec;
 }
 function setRecordDeal(id,v){
   const r=(SESSION.records||[]).find(x=>x.id===id);if(!r)return;
@@ -3840,11 +3841,13 @@ function renderAdmin(){
       <button class="abtn" onclick="changePin()">變更密碼</button>
     </div>
     <div class="setgrid">
-      <div class="setcard"><div class="st">登入帳號（雲端驗證）</div>
-        <div style="font-size:14px;color:var(--ink-soft);line-height:1.9">
-          <div><b>員工密碼</b>已改為雲端伺服器驗證，後台看不到、也不再存在本系統裡。每個人登入後可用「改密碼」自行修改；忘記密碼請找 darren 到 Firebase 後台重設。新業務的初始密碼為 <b style="color:var(--ink)">oma2026</b>。</div>
-          <div><b>客戶登入代碼：</b>${(DB.sales&&DB.sales.list||[]).map(r=>`${esc(r.key)}：<b style="color:var(--ink)">${esc(repCustCode(r))}</b>`).join(" ・ ")||"—"}　<span style="color:var(--ink-soft)">（自選模式：<b style="color:var(--ink)">${esc((DB.sales&&DB.sales.custBase)||"2026")}</b>）</span></div>
-        </div>
+      <div class="setcard"><div class="st">登入密碼（可看、可改）</div>
+        <div style="font-size:12.5px;color:var(--ink-soft);line-height:1.6;margin-bottom:6px">下面就是每個人登入要打的密碼。改好按右邊「更新」即存、同步到所有電腦，下次登入立刻用新的。預設都是 <b style="color:var(--ink)">123</b>。</div>
+        ${[['管理後台','adminPin'],['採購','buyerPin'],['會計','acctPin'],['技術','techPin'],['出納','cashierPin']].map(function(x){return '<div style="display:flex;align-items:center;gap:8px;margin-top:6px"><span style="min-width:72px;font-size:13px;font-weight:700;color:var(--ink-soft)">'+x[0]+'</span><input id="pwrole_'+x[1]+'" value="'+escAttr(DB[x[1]]||'123')+'" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--line-2);border-radius:8px;font-size:14px"><button class="abtn" style="padding:7px 14px" onclick="savePinRole(\''+x[1]+'\')">更新</button></div>';}).join('')}
+        <div style="border-top:1px solid var(--line);margin-top:10px;padding-top:4px"></div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:6px"><span style="min-width:72px;font-size:13px;font-weight:700;color:var(--ink-soft)">業務共用</span><input id="pwrep_業務共用" value="${escAttr((DB.repPins&&DB.repPins['業務共用'])||(DB.sales&&DB.sales.sharedPin)||'123')}" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--line-2);border-radius:8px;font-size:14px"><button class="abtn" style="padding:7px 14px" onclick="savePinRep('業務共用')">更新</button></div>
+        ${(DB.sales&&DB.sales.list||[]).map(function(r){return '<div style="display:flex;align-items:center;gap:8px;margin-top:6px"><span style="min-width:72px;font-size:13px;font-weight:700;color:var(--ink-soft)">業務 '+esc(r.key)+'</span><input id="pwrep_'+esc(r.key)+'" value="'+escAttr((DB.repPins&&DB.repPins[r.key])||'123')+'" style="flex:1;min-width:0;padding:7px 9px;border:1px solid var(--line-2);border-radius:8px;font-size:14px"><button class="abtn" style="padding:7px 14px" onclick="savePinRep(\''+esc(r.key)+'\')">更新</button></div>';}).join('')}
+        <div style="font-size:12px;color:var(--ink-soft);margin-top:10px;line-height:1.6"><b>客戶登入代碼：</b>${(DB.sales&&DB.sales.list||[]).map(r=>`${esc(r.key)}：<b style="color:var(--ink)">${esc(repCustCode(r))}</b>`).join(" ・ ")||"—"}　<span>（自選模式：<b style="color:var(--ink)">${esc((DB.sales&&DB.sales.custBase)||"2026")}</b>）</span></div>
       </div>
       <div class="setcard"><div class="st">客戶送單通知</div>
         <div style="font-size:13px;color:var(--ink-soft);line-height:1.55;margin-bottom:10px">客戶送出選配後，業務端會即時收到（響鈴＋按鈕閃爍）。開啟桌面通知後，頁面在背景也會跳通知。要寄到 Gmail 需填下方 EmailJS 資料。</div>
