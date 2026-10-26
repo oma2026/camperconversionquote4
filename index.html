@@ -772,7 +772,13 @@ body.custmode .cust-exit{display:inline-flex!important}
       <div class="field full nofill biz-cust-field"><label>客戶名稱</label><input id="cName" placeholder="王先生"></div>
       <div class="field nofill biz-cust-field"><label>車型</label><select id="cCar" onchange="onBizCarChange()"><option value="">請選擇車型</option></select></div>
       <div class="field nofill biz-cust-field"><label>業務員</label><div class="rep-readout" id="cRepShow">—</div></div>
-      <div class="field full nofill biz-cust-field"><label>車身碼</label><input id="cVin" placeholder="車輛車身碼（VIN）"></div>
+      <div class="field full nofill biz-cust-field"><label>這筆改裝</label>
+        <div style="display:flex;gap:16px;align-items:center;font-size:14px;flex-wrap:wrap">
+          <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="radio" name="cBundle" id="cBundleYes" value="yes" onchange="onBundleChange()"> 含在購車內（需填車身碼）</label>
+          <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer"><input type="radio" name="cBundle" id="cBundleNo" value="no" checked onchange="onBundleChange()"> 額外加購</label>
+        </div>
+      </div>
+      <div class="field full nofill biz-cust-field"><label>車身碼 <span id="cVinReq" style="color:var(--rust);font-weight:800;display:none">＊必填</span></label><input id="cVin" placeholder="車輛車身碼（VIN）"></div>
       <div class="field full nofill"><label>其他需求</label><textarea id="cOther" rows="2" placeholder="清單沒有、想加裝的寫這裡"></textarea></div>
       <div class="field full nofill"><label>備註</label><textarea id="cNote" rows="2" placeholder="其他備註"></textarea></div>
     </div>
@@ -782,9 +788,7 @@ body.custmode .cust-exit{display:inline-flex!important}
       <button class="btn-clear" onclick="newQuote()">新報價</button>
       <button class="btn-clear" onclick="saveQuote()">儲存報價</button>
       <button class="btn-print" onclick="printQuote()">列印報價單</button>
-    </div>
-    <div class="biz-actions" style="margin-top:8px">
-      <button class="btn-print" onclick="sendToPurchase()" style="width:100%;background:#2f7d4f;border-color:#2f7d4f">📦 傳給採購（採購部門就看得到）</button>
+      <button class="btn-print" onclick="sendToPurchase()" style="background:#2f7d4f;border-color:#2f7d4f">📦 傳給採購</button>
     </div>
     <div class="qactions cust-actions">
       <button class="btn-print" style="flex:1" onclick="submitCustomer()">完成，送出給業務</button>
@@ -1055,7 +1059,7 @@ const SEED = {
 
 const LS_KEY="oma_quote_v1";
 const SESS_KEY="oma_session_v1";
-const SALES_SEED=["業務共用","Peter","CBC","Allen","Gary"];
+const SALES_SEED=["業務共用","Peter","Allen","Gary"];
 let SALES=SALES_SEED.slice();   // 執行期會由 DB.sales 重建（可在管理後台增刪業務）
 const CARS=["Sunlight Cliff 540","Sunlight Cliff 600","Sunlight Cliff T58","Sunlight Cliff T66S","Sunlight Cliff T67S","Burstner Habiton X","Burstner Habiton Signature"];
 /* 車種分類 B／C：每台車有分類（存 DB.carTypes），每個品項可設定供應車型（it.carType：''＝全車型共用、'B'＝僅B型、'C'＝僅C型）。
@@ -1087,7 +1091,6 @@ const COMPANY={
 const REPS_SEED={
   "業務共用":{title:"",zh:"",phone:"04-23804386",email:"",line:""},
   "Peter":{title:"副總經理",zh:"潘 宗瑜",phone:"0912-612502",email:"peter@o-ma.com.tw",line:"@pan12"},
-  "CBC":{title:"銷售經理",zh:"陳 柏丞",phone:"0982-270163",email:"cbc@o-ma.com.tw",line:"0982270163"},
   "Allen":{title:"銷售經理",zh:"賴 倚賢",phone:"0902-269858",email:"lai@o-ma.com.tw",line:"0902269858"},
   "Gary":{title:"銷售經理",zh:"蔡 春連",phone:"0918-830588",email:"gary.tsai@o-ma.com.tw",line:"chunlien26"}
 };
@@ -1630,6 +1633,8 @@ function toast(msg){const t=document.getElementById("toast");t.textContent=msg;t
 /* ===== 改裝業務端 房呆／防呆 helpers（2026-07-09 新增）===== */
 function _bizName(){ var e=document.getElementById("cName"); return e?String(e.value||"").trim():""; }
 function _bizRequireName(){ if(_bizName())return true; toast("請先填客戶名稱再繼續"); var e=document.getElementById("cName"); if(e){try{e.focus();}catch(_){}} return false; }
+function onBundleChange(){ var y=document.getElementById("cBundleYes"),req=document.getElementById("cVinReq"); if(req)req.style.display=(y&&y.checked)?"":"none"; }
+function _bizRequireVinIfBundled(){ var y=document.getElementById("cBundleYes"); if(y&&y.checked){ var vin=((document.getElementById("cVin")||{}).value||"").trim(); if(!vin){ toast("「含在購車內」要填車身碼（VIN）"); var e=document.getElementById("cVin"); if(e){try{e.focus();}catch(_){}} return false; } } return true; }
 function _bizGuard(key,ms){ if(!window._bizLock)window._bizLock={}; var t=Date.now(); if(window._bizLock[key]&&(t-window._bizLock[key])<(ms||1200))return false; window._bizLock[key]=t; return true; }
 
 /* ---------- mode ---------- */
@@ -1999,7 +2004,7 @@ function updateBizPill(){
   if(!show){pill.innerHTML="";return;}
   let who="",btns="";
   if(role==="biz"){const rp=REPS[currentRep]||{};who="業務："+(rp.title?rp.title+" ":"")+(rp.zh?rp.zh+" ":"")+currentRep;
-    btns=`<button onclick="showBizDash()">🏠 工作台</button><button onclick="openMyLogins()">客戶登入</button><button onclick="changeMyPin()">改密碼</button>`;}
+    btns=`<button onclick="showBizDash()">🏠 工作台</button><button onclick="changeMyPin()">改密碼</button>`;}
   else{who="身分："+({admin:"管理後台",buyer:"採購",acct:"會計",tech:"技術",cashier:"出納"}[role]||role);
     if(role!=="admin")btns=`<button onclick="changeRolePin('${role}')">改密碼</button>`;}
   pill.innerHTML=`<span id="pillWho">${who}</span>${btns}`;
@@ -2096,6 +2101,7 @@ function tryLogin(){
   const ROLE_NAMES={darren:"role:admin",purchase:"role:buyer",accounting01:"role:acct",accounting04:"role:acct",accounting10:"role:cashier",tech:"role:tech"};   // 角色→英文登入名字
   let v;
   if(ROLE_NAMES[_low]) v=ROLE_NAMES[_low];
+  else if(_low==="sales"){ v="rep:業務共用"; }   // sales = 業務共用
   else { const _rk=(typeof SALES!=="undefined"?SALES:[]).find(k=>String(k).toLowerCase()===_low && k!=="業務共用"); if(!_rk){ err.textContent="找不到這個名字"; return; } v="rep:"+_rk; }
   const pw=(document.getElementById("bizPw").value||"").trim();
   if(!pw){err.textContent="請輸入密碼";return;}
@@ -2955,6 +2961,7 @@ function clearAll(){
 function saveQuote(){
   if(!Object.keys(quote).length){toast("報價單是空的");return;}
   if(!_bizRequireName())return;
+  if(!_bizRequireVinIfBundled())return;
   if(!_bizGuard("saveQuote"))return;
   const name=document.getElementById("cName").value||"—";
   const car=document.getElementById("cCar").value||"—";
@@ -2963,6 +2970,7 @@ function saveQuote(){
 function sendToPurchase(){
   if(!Object.keys(quote).length){toast("報價單是空的");return;}
   if(!_bizRequireName())return;
+  if(!_bizRequireVinIfBundled())return;
   if(!_bizGuard("sendPurchase"))return;
   const name=document.getElementById("cName").value||"—";
   const car=document.getElementById("cCar").value||"—";
@@ -3052,6 +3060,7 @@ function toggleQuote(open){document.getElementById("quotePanel").classList.toggl
 function printQuote(){
   const ids=Object.keys(quote);if(!ids.length){toast("報價單是空的");return;}
   if(!_bizRequireName())return;
+  if(!_bizRequireVinIfBundled())return;
   if(!_bizGuard("printQuote"))return;
   const name=document.getElementById("cName").value||"—";
   const car=document.getElementById("cCar").value||"—";
@@ -3612,12 +3621,13 @@ function recordQuote(name,car){
   const total=applyTotalRound(items.reduce((s,it)=>s+(it.lineTotal||0),0));
   const totalCost=items.reduce((s,it)=>s+(it.lineCost||0),0);
   const vin=(document.getElementById("cVin")&&document.getElementById("cVin").value.trim())||"";
+  var _bundled=!!(document.getElementById("cBundleYes")&&document.getElementById("cBundleYes").checked);
   const rec={id:"r"+Date.now().toString(36),ts:Date.now(),rep:currentRep,
-    cust:{name:name||"—",car:car||"—",vin:vin},items,total,totalCost,deal:null,confirmed:false};
+    cust:{name:name||"—",car:car||"—",vin:vin},bundled:_bundled,items,total,totalCost,deal:null,confirmed:false};
   if(editingRecordId){
     const ex=(SESSION.records||[]).find(r=>r.id===editingRecordId);
     editingRecordId=null;
-    if(ex){ex.items=items;ex.total=total;ex.totalCost=totalCost;ex.cust={name:name||"—",car:car||"—",vin:vin};ex.ts=Date.now();
+    if(ex){ex.items=items;ex.total=total;ex.totalCost=totalCost;ex.cust={name:name||"—",car:car||"—",vin:vin};ex.bundled=_bundled;ex.ts=Date.now();
       saveSession();fbSaveRecord(ex);if(unlocked)renderAdmin();if(dealModalOpen)renderDeals();return ex;}
   }
   const last=SESSION.records[0];
