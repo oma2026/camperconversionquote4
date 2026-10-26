@@ -1565,7 +1565,7 @@ function openLogin(){
   back.style.display="flex";
   setTimeout(()=>{const el=document.getElementById("bizPw");if(el)el.focus();},60);
 }
-function closeLogin(){document.getElementById("bizLock").style.display="none";}
+function closeLogin(){ if(typeof hideStaffLoading==="function") hideStaffLoading(); document.getElementById("bizLock").style.display="none";}
 /* ===== 業務工作台 (2026-07) ===== */
 function bizCaseStats(){
   var recs=(SESSION.records||[]).filter(function(r){return r.rep===currentRep;});
@@ -2052,22 +2052,55 @@ function exitCustomer(){
 /* ---------- 入口頁：員工 / 客戶 ---------- */
 let custInfo={name:"",car:"",rep:""};
 function showEntryGate(){
+  if(location.hash.toLowerCase().indexOf("staff")>=0){ location.href="https://oma2026.github.io/vipentry/"; return; }   // 從 VIP 頁來的（#staff）→ 一律回 VIP 入口選系統
   const el=document.getElementById("entryLogo");if(el&&!el.innerHTML)el.innerHTML='<div style="background:#fff;padding:8px 14px;border-radius:12px;display:inline-flex">'+LOGO_SVG+'</div>';
   document.getElementById("bizLock").style.display="none";
   document.getElementById("custInfoModal").style.display="none";
   document.getElementById("entryGate").style.display="flex";
   updateTopLogout();
 }
-function _staffHandoff(){   // VIP 頁帶來的員工帳密 → 自動填入並送出登入
+function showStaffLoading(){
+  var d=document.getElementById("staffLoadingBg");
+  if(d){ d.style.display="flex"; return; }
+  d=document.createElement("div");
+  d.id="staffLoadingBg";
+  d.style.cssText="position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#fff";
+  d.innerHTML='<div style="text-align:center"><h3 style="margin:0 0 8px;font-size:20px;color:#1a2a4a">登入中…</h3><p style="margin:0;color:#5a6475;font-size:13px">正在為您準備系統，請稍候</p></div>';
+  document.body.appendChild(d);
+}
+function hideStaffLoading(){ var el=document.getElementById("staffLoadingBg"); if(el) el.style.display="none"; }
+function _staffHandoff(){   // VIP 頁帶來的員工帳密 → 背景自動登入（蓋「登入中…」，不讓登入框閃出來）
   try{
-    var raw=sessionStorage.getItem("oma_staff_handoff"); if(!raw) return;
+    var raw=sessionStorage.getItem("oma_staff_handoff"); if(!raw) return false;
     sessionStorage.removeItem("oma_staff_handoff");
-    var h=JSON.parse(raw); if(!h||!h.name) return;
-    if(h.ts && (Date.now()-h.ts>120000)) return;   // 逾 2 分鐘作廢
+    var h=JSON.parse(raw); if(!h||!h.name) return false;
+    if(h.ts && (Date.now()-h.ts>120000)) return false;   // 逾 2 分鐘作廢
     var s=document.getElementById("loginSel"), p=document.getElementById("bizPw");
     if(s) s.value=h.name; if(p) p.value=h.pw||"";
-    setTimeout(function(){ if(typeof tryLogin==="function") tryLogin(); }, 150);
-  }catch(e){}
+    showStaffLoading();   // 先蓋「登入中…」，登入框全程不顯示
+    setTimeout(function(){
+      if(typeof tryLogin!=="function"){ hideStaffLoading(); pickEmployee(); return; }
+      tryLogin();
+      // 失敗偵測：Firebase 是非同步，輪詢 bizErr；出現終端錯誤訊息(非「…中」「載入中」)就露出登入框
+      var tries=0, iv=setInterval(function(){
+        tries++;
+        var t=(document.getElementById("bizErr").textContent||"").trim();
+        var working = (t==="") || /中…?$/.test(t) || t.indexOf("載入中")>=0;
+        if(!working){
+          clearInterval(iv); hideStaffLoading();
+          document.getElementById("entryGate").style.display="none";
+          var back=document.getElementById("bizLock");
+          back.classList.add("gate");
+          var lc=document.getElementById("loginCancel"); if(lc) lc.style.display="none";
+          document.getElementById("bizPw").value="";
+          document.getElementById("bizErr").textContent=t;   // 保留錯誤訊息
+          back.style.display="flex";
+          setTimeout(function(){ var el=document.getElementById("bizPw"); if(el) el.focus(); },40);
+        } else if(tries>40){ clearInterval(iv); }   // 8 秒保險（成功會自己 reload/收板）
+      }, 200);
+    }, 30);
+    return true;
+  }catch(e){ return false; }
 }
 function pickEmployee(){document.getElementById("entryGate").style.display="none";openLogin();}
 function pickCustomer(){
@@ -4096,7 +4129,7 @@ renderQuote();
 applyRole();
 if(readVipHandoff()){setMode("biz");openCustomerFromHandoff(readVipHandoff());}   // 從 VIP 入口頁帶進來（最優先，蓋過本機殘留的員工/管理登入）
 else if(SESSION&&SESSION.role){routeToRole();updateBizPill();}
-else if(location.hash.toLowerCase().indexOf("staff")>=0){setMode("biz");pickEmployee();_staffHandoff();}   // 從 VIP 頁選「員工」帶進來 → 直接開員工登入；若帶了帳密就自動登入
+else if(location.hash.toLowerCase().indexOf("staff")>=0){setMode("biz"); if(!_staffHandoff()) pickEmployee();}   // 從 VIP 頁選「員工」帶進來 → 帶了帳密就背景自動登入(不閃登入框)；沒帶才顯示登入框
 else{setMode("biz");showEntryGate();}
 updateInboxBtn();
 
