@@ -182,6 +182,13 @@ body.custmode .bizpill{display:none!important}
   padding:8px 15px;border-radius:999px;font-size:15.5px;font-weight:700;transition:.15s;
 }
 .cattab.active{background:var(--pine);color:#fff;border-color:var(--pine)}
+.cattab.step .stepn{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:999px;background:var(--line-2);color:var(--ink-soft);font-size:12px;font-weight:800;margin-right:7px;vertical-align:middle}
+.cattab.step.active .stepn{background:#fff;color:var(--pine)}
+.catnav{display:flex;align-items:center;gap:12px;margin-top:18px;padding-top:16px;border-top:1px solid var(--line-2)}
+.catnav-btn{border:1px solid var(--line-2);background:var(--card);color:var(--ink);font-weight:800;font-size:15px;padding:11px 20px;border-radius:12px;cursor:pointer;transition:.15s}
+.catnav-btn:disabled{opacity:.4;cursor:default}
+.catnav-btn.next{background:var(--pine);color:#fff;border-color:var(--pine)}
+.catnav-mid{flex:1;text-align:center;font-size:14px;font-weight:700;color:var(--ink-soft)}
 
 .subgroup{margin-top:22px}
 .subhead{display:flex;align-items:center;gap:12px;margin:0 2px 12px}
@@ -758,6 +765,7 @@ body.custmode .cust-exit{display:inline-flex!important}
     </div>
     <div class="cattabs" id="catTabs"></div>
     <div id="catBody"></div>
+    <div class="catnav" id="catNav" style="display:none"></div>
   </div>
 
   <aside class="quote" id="quotePanel">
@@ -2893,24 +2901,56 @@ document.getElementById("pin").focus();
 /* ---------- catalog (business) ---------- */
 function renderCatTabs(){
   const wrap=document.getElementById("catTabs");
-  if(!activeCat)activeCat="__all";
+  const cats=(DB&&DB.categories)||[];
+  // 一類一步：activeCat 預設落在第一類（不再用「全部」）
+  if(!activeCat||activeCat==="__all"||!cats.some(c=>c.id===activeCat)) activeCat=(cats[0]&&cats[0].id)||"__all";
   wrap.innerHTML="";
-  const all=document.createElement("button");
-  all.className="cattab"+(activeCat==="__all"?" active":"");
-  all.textContent="全部";all.onclick=()=>{activeCat="__all";renderCatalog();};
-  wrap.appendChild(all);
-  DB.categories.forEach(c=>{
+  cats.forEach((c,i)=>{
     const b=document.createElement("button");
-    b.className="cattab"+(activeCat===c.id?" active":"");
-    b.textContent=c.name;b.onclick=()=>{activeCat=c.id;renderCatalog();};
+    b.className="cattab step"+(activeCat===c.id?" active":"");
+    b.innerHTML='<span class="stepn">'+(i+1)+'</span>'+esc(c.name);
+    b.onclick=()=>{activeCat=c.id;renderCatalog();};
     wrap.appendChild(b);
   });
+}
+/* 一類一步的「上一步／下一步」列；搜尋時（跨全部品項）隱藏 */
+function renderCatNav(searching){
+  const nav=document.getElementById("catNav"); if(!nav)return;
+  const cats=(DB&&DB.categories)||[];
+  if(searching||cats.length<2){ nav.style.display="none"; nav.innerHTML=""; return; }
+  const idx=Math.max(0,cats.findIndex(c=>c.id===activeCat));
+  const first=idx<=0, last=idx>=cats.length-1;
+  nav.style.display="flex";
+  nav.innerHTML=
+    '<button class="catnav-btn" '+(first?'disabled':'')+' onclick="gotoCatStep(-1)">← 上一步</button>'
+    +'<span class="catnav-mid">第 '+(idx+1)+' / '+cats.length+' 類 · '+esc(cats[idx]?cats[idx].name:'')+'</span>'
+    +'<button class="catnav-btn next" onclick="'+(last?'finishCatSteps()':'gotoCatStep(1)')+'">'+(last?'✓ 挑好了':'下一步 →')+'</button>';
+}
+function gotoCatStep(dir){
+  const cats=(DB&&DB.categories)||[];
+  let idx=Math.max(0,cats.findIndex(c=>c.id===activeCat));
+  idx=Math.min(cats.length-1,Math.max(0,idx+dir));
+  if(cats[idx])activeCat=cats[idx].id;
+  const s=document.getElementById("searchIn"); if(s)s.value="";
+  renderCatalog();
+  try{ const cat=document.querySelector(".catalog"); if(cat)cat.scrollTo({top:0,behavior:"smooth"}); else window.scrollTo(0,0); }catch(e){}
+}
+function finishCatSteps(){
+  toggleQuote(true);
+  if(document.body.classList.contains("custmode")){
+    toast("挑好了！看右邊清單，沒問題就按「完成，送出給業務」");
+  }else{
+    toast("挑好了！右邊填客戶名稱、車型就能存檔／列印");
+    const el=document.getElementById("cName"); if(el){ try{el.focus();el.scrollIntoView({block:"center",behavior:"smooth"});}catch(e){} }
+  }
 }
 function renderCatalog(){
   renderCatTabs();
   const q=(document.getElementById("searchIn").value||"").trim().toLowerCase();
+  const searching=!!q;
   const body=document.getElementById("catBody");body.innerHTML="";
-  const cats=activeCat==="__all"?DB.categories:DB.categories.filter(c=>c.id===activeCat);
+  // 一類一步：沒搜尋時只顯示目前這一類；有搜尋時跨全部品項找
+  const cats=searching?DB.categories:DB.categories.filter(c=>c.id===activeCat);
   const bizCar=(document.getElementById("cCar")||{}).value||"";
   let shown=0;
   cats.forEach(cat=>{
@@ -2922,7 +2962,7 @@ function renderCatalog(){
       });
       if(!matches.length)return;
       const g=document.createElement("div");g.className="subgroup";
-      g.innerHTML=`<div class="subhead">${activeCat==="__all"?`<span class="tag">${cat.name}</span><span class="cat-of">${sub.name}</span>`:`<span class="tag">${sub.name}</span>`}
+      g.innerHTML=`<div class="subhead">${searching?`<span class="tag">${cat.name}</span><span class="cat-of">${sub.name}</span>`:`<span class="tag">${sub.name}</span>`}
         ${sub.name==="冷氣本體"?`<span class="subnote">選任一冷氣會自動附標配（整車配線、庫倫錶／遙控器、充電器）</span>`:""}
         <span class="rule"></span></div>`;
       const grid=document.createElement("div");grid.className="grid";
@@ -2951,6 +2991,7 @@ function renderCatalog(){
     });
   });
   if(!shown)body.innerHTML=`<div class="empty"><b>找不到符合的品項</b>換個關鍵字試試，或切換分類</div>`;
+  renderCatNav(searching);
 }
 
 /* ---------- quote ---------- */
@@ -3031,6 +3072,8 @@ function newQuote(){
   if(SESSION.cust[currentRep])SESSION.cust[currentRep]={name:"",car:""};
   ["cName","cCar","cVin","cOther","cNote"].forEach(id=>{const e=document.getElementById(id);if(e)e.value="";});
   const dp=document.getElementById("dealPrice");if(dp)dp.value="";
+  activeCat=null;   // 一類一步：開新報價回到第一類
+  const si=document.getElementById("searchIn");if(si)si.value="";
   renderDealStatus();saveSession();renderCatalog();renderQuote();
 }
 
