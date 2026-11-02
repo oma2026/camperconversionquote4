@@ -176,14 +176,15 @@ body.custmode .bizpill{display:none!important}
 }
 .search input{border:none;outline:none;background:transparent;font-size:17px;width:100%;color:var(--ink)}
 .search svg{flex:none;color:var(--ink-soft)}
-.cattabs{display:flex;gap:8px;flex-wrap:wrap}
+.cattabs{display:flex;gap:8px;flex-wrap:wrap;position:sticky;top:var(--navtop,88px);z-index:30;background:var(--paper);padding:10px 0 11px;margin-bottom:2px}
+.cattabs:empty{display:none}
 .cattab{
   border:1px solid var(--line-2);background:var(--paper-2);color:var(--ink-soft);
   padding:8px 15px;border-radius:999px;font-size:15.5px;font-weight:700;transition:.15s;
 }
 .cattab.active{background:var(--pine);color:#fff;border-color:var(--pine)}
 /* 單頁往下捲：每個大分類一段 */
-.catsec{margin-bottom:30px}
+.catsec{margin-bottom:30px;scroll-margin-top:calc(var(--navtop,88px) + 64px)}
 .catsec+.catsec{padding-top:24px;border-top:1px solid var(--line-2)}
 .catsec-h{font-size:22px;font-weight:900;color:var(--ink);margin:4px 0 14px;letter-spacing:.3px}
 
@@ -2919,15 +2920,15 @@ function _buildItemCard(it){
   return card;
 }
 
-// 單頁捲動：所有大分類一段接一段往下排，搜尋時依關鍵字過濾（一樣往下捲）
+// 單頁捲動：所有大分類一段接一段往下排；上方有釘住的分頁可直接跳到該段
 function renderCatalog(){
   const q=(document.getElementById("searchIn").value||"").trim().toLowerCase();
-  const tabs=document.getElementById("catTabs"); if(tabs)tabs.innerHTML="";       // 不用頁籤
+  const tabs=document.getElementById("catTabs");
   const nav=document.getElementById("catNav"); if(nav){nav.style.display="none";nav.innerHTML="";nav.className="";}
   const body=document.getElementById("catBody"); body.innerHTML="";
-  const car=_bizCar(); let shown=0;
+  const car=_bizCar(); let shown=0; const shownCats=[];
   (DB.categories||[]).forEach(cat=>{
-    const sec=document.createElement("div"); sec.className="catsec";
+    const sec=document.createElement("div"); sec.className="catsec"; sec.id="catsec_"+cat.id;
     sec.innerHTML='<div class="catsec-h">'+esc(cat.name)+'</div>';
     let catShown=0;
     (cat.subs||[]).forEach(sub=>{
@@ -2945,9 +2946,31 @@ function renderCatalog(){
       matches.forEach(it=>{ shown++; catShown++; grid.appendChild(_buildItemCard(it)); });
       g.appendChild(grid); sec.appendChild(g);
     });
-    if(catShown) body.appendChild(sec);
+    if(catShown){ body.appendChild(sec); shownCats.push(cat); }
   });
+  // 上方分頁（釘在頂端）：點了直接跳到該大分類那一段，不用手動捲
+  if(tabs){
+    tabs.innerHTML = shownCats.length>1
+      ? shownCats.map((c,i)=>'<button class="cattab'+(i===0?" active":"")+'" data-jump="'+c.id+'" onclick="jumpCat(\''+c.id+'\')">'+esc(c.name)+'</button>').join("")
+      : "";
+  }
   if(!shown) body.innerHTML=`<div class="empty"><b>${q?"找不到符合的品項":"目前沒有可選品項"}</b>${q?"換個關鍵字試試":"換個車型看看"}</div>`;
+  _spyCats(shownCats);
+}
+// 點分頁 → 跳到該段（block:start，CSS 的 scroll-margin-top 會讓標題剛好露出來）
+function jumpCat(id){
+  const el=document.getElementById("catsec_"+id); if(el) el.scrollIntoView({behavior:"smooth",block:"start"});
+  _setActiveChip(id);
+}
+function _setActiveChip(id){ const t=document.getElementById("catTabs"); if(!t)return; t.querySelectorAll(".cattab").forEach(b=>b.classList.toggle("active", b.getAttribute("data-jump")===id)); }
+// 捲動時自動把目前這一段的分頁變亮
+let _catSpy=null;
+function _spyCats(cats){
+  try{ if(_catSpy){_catSpy.disconnect();_catSpy=null;} }catch(e){}
+  if(!cats||cats.length<2||typeof IntersectionObserver==="undefined")return;
+  const top=parseInt(getComputedStyle(document.documentElement).getPropertyValue("--navtop"))||88;
+  _catSpy=new IntersectionObserver(function(ents){ ents.forEach(function(e){ if(e.isIntersecting) _setActiveChip(e.target.id.replace("catsec_","")); }); },{rootMargin:"-"+(top+56)+"px 0px -62% 0px",threshold:0});
+  cats.forEach(function(c){ const el=document.getElementById("catsec_"+c.id); if(el)_catSpy.observe(el); });
 }
 
 /* ---------- quote ---------- */
