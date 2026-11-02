@@ -182,21 +182,10 @@ body.custmode .bizpill{display:none!important}
   padding:8px 15px;border-radius:999px;font-size:15.5px;font-weight:700;transition:.15s;
 }
 .cattab.active{background:var(--pine);color:#fff;border-color:var(--pine)}
-/* 三步驟精靈（排版比照 Caterham） */
-.wzsteps{display:flex;gap:8px;flex-wrap:wrap}
-.wzstep-ind{font-size:13.5px;font-weight:800;color:var(--ink-soft);background:var(--paper-2);border:1px solid var(--line-2);border-radius:999px;padding:7px 15px;cursor:pointer;white-space:nowrap}
-.wzstep-ind.active{color:#fff;background:var(--pine);border-color:var(--pine)}
-.wizgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;margin-top:4px}
-.wizpick{text-align:left;border:1.5px solid var(--line-2);background:var(--card);border-radius:16px;padding:22px 20px;cursor:pointer;transition:.15s}
-.wizpick:hover{border-color:var(--pine);box-shadow:0 4px 16px rgba(0,0,0,.07);transform:translateY(-2px)}
-.wizpick-nm{font-size:19px;font-weight:900;color:var(--ink);margin-bottom:6px}
-.wizpick-sub{font-size:13.5px;color:var(--ink-soft);font-weight:700}
-/* 底部導覽列 .wznav */
-.wznav{display:flex;align-items:center;gap:12px;margin-top:20px;padding-top:16px;border-top:1px solid var(--line-2)}
-.wznav .wiz-spacer{flex:1}
-.wznav .btn-ghost{border:1px solid var(--line-2);background:var(--card);color:var(--ink);font-weight:800;font-size:15px;padding:11px 20px;border-radius:12px;cursor:pointer}
-.wznav .btn-next{border:1px solid var(--pine);background:var(--pine);color:#fff;font-weight:800;font-size:15px;padding:11px 22px;border-radius:12px;cursor:pointer}
-.wznav .wiz-done{font-size:12.5px;color:var(--ink-soft)}
+/* 單頁往下捲：每個大分類一段 */
+.catsec{margin-bottom:30px}
+.catsec+.catsec{padding-top:24px;border-top:1px solid var(--line-2)}
+.catsec-h{font-size:22px;font-weight:900;color:var(--ink);margin:4px 0 14px;letter-spacing:.3px}
 
 .subgroup{margin-top:22px}
 .subhead{display:flex;align-items:center;gap:12px;margin:0 2px 12px}
@@ -2906,11 +2895,9 @@ document.getElementById("pin").focus();
 }
 
 
-/* ---------- catalog (business) — 三步驟精靈：大分類 → 小分類 → 品項 ---------- */
-let wizStep=1, wizBig=null, wizSub=null;
-function wizReset(){ wizStep=1; wizBig=null; wizSub=null; }
+/* ---------- catalog (business) — 單頁往下捲：一個大分類一段，底下小分類一節一節 ---------- */
+function wizReset(){}   // 保留給舊呼叫點用（已改成單頁捲動，不需要步驟）
 function _bizCar(){ return (document.getElementById("cCar")||{}).value||""; }
-function _scrollCat(){ try{ const cat=document.querySelector(".catalog"); if(cat)cat.scrollTo({top:0,behavior:"smooth"}); }catch(e){} }
 
 // 品項卡片（沿用原本樣式），綁加入／移除
 function _buildItemCard(it){
@@ -2932,116 +2919,35 @@ function _buildItemCard(it){
   return card;
 }
 
-// 頂部步驟膠囊（比照 Caterham：1 · 大分類 ｜ 2 · 小分類 ｜ 3 · 品項），可點回上一層
-function renderWizProgress(){
-  const tabs=document.getElementById("catTabs"); if(!tabs)return;
-  const big=(DB.categories||[]).find(c=>c.id===wizBig);
-  const p1='1 · 大分類'+(big?'：'+esc(big.name):'');
-  const p2='2 · 小分類'+(wizSub?'：'+esc(wizSub):'');
-  const p3='3 · 品項';
-  tabs.innerHTML='<div class="wzsteps">'
-    +'<span class="wzstep-ind'+(wizStep===1?" active":"")+'" onclick="wizGo(1)">'+p1+'</span>'
-    +'<span class="wzstep-ind'+(wizStep===2?" active":"")+'" onclick="wizGo(2)">'+p2+'</span>'
-    +'<span class="wzstep-ind'+(wizStep===3?" active":"")+'" onclick="wizGo(3)">'+p3+'</span>'
-    +'</div>';
-}
-// 底部導覽列（比照 Caterham .wznav：左 上一步、右 下一步）
-function renderWizNav(){
-  const nav=document.getElementById("catNav"); if(!nav)return;
-  nav.style.display="flex"; nav.className="wznav"; nav.innerHTML="";
-  let h="";
-  if(wizStep>1) h+='<button class="btn-ghost" onclick="wizPrev()">← 上一步</button>';
-  h+='<span class="wiz-spacer"></span>';
-  if(wizStep===1) h+='<button class="btn-next" onclick="wizNext()">下一步：選小分類 →</button>';
-  else if(wizStep===2) h+='<button class="btn-next" onclick="wizNext()">下一步：挑品項 →</button>';
-  else h+='<span class="wiz-done">挑好的品項會進右邊清單，可按「上一步」再挑別類</span>';
-  nav.innerHTML=h;
-}
-function wizGo(step){
-  if(step<=1){ wizStep=1; }
-  else if(step===2){ wizStep=wizBig?2:1; }
-  else { wizStep=!wizBig?1:(!wizSub?2:3); }
-  const s=document.getElementById("searchIn"); if(s)s.value="";
-  renderCatalog(); _scrollCat();
-}
-function wizNext(){
-  if(wizStep===1){ if(!wizBig){toast("請先選一個大分類");return;} const big=(DB.categories||[]).find(c=>c.id===wizBig); const subs=(big&&big.subs)||[]; if(subs.length===1){wizSub=subs[0].name;wizStep=3;}else wizStep=2; }
-  else if(wizStep===2){ if(!wizSub){toast("請先選一個小分類");return;} wizStep=3; }
-  renderCatalog(); _scrollCat();
-}
-function wizPrev(){ if(wizStep>1){ wizStep-=1; renderCatalog(); _scrollCat(); } }
-
+// 單頁捲動：所有大分類一段接一段往下排，搜尋時依關鍵字過濾（一樣往下捲）
 function renderCatalog(){
   const q=(document.getElementById("searchIn").value||"").trim().toLowerCase();
-  const tabs=document.getElementById("catTabs");
+  const tabs=document.getElementById("catTabs"); if(tabs)tabs.innerHTML="";       // 不用頁籤
   const nav=document.getElementById("catNav"); if(nav){nav.style.display="none";nav.innerHTML="";nav.className="";}
   const body=document.getElementById("catBody"); body.innerHTML="";
-  if(q){ if(tabs)tabs.innerHTML=""; renderCatSearch(q,body); return; }
-  const cats=DB.categories||[];
-  if(wizBig&&!cats.some(c=>c.id===wizBig)){ wizBig=null; wizSub=null; wizStep=1; }   // DB 變了、原分類不在了
-  renderWizProgress();
-  if(wizStep===1) renderWizBig(body);
-  else if(wizStep===2) renderWizSub(body);
-  else renderWizItems(body);
-  renderWizNav();
-}
-
-// Step 1：大分類卡片（點了自動進下一步）
-function renderWizBig(body){
-  const wrap=document.createElement("div"); wrap.className="wizgrid";
-  (DB.categories||[]).forEach(c=>{
-    const n=(c.subs||[]).reduce((a,s)=>a+(s.items?s.items.length:0),0);
-    const b=document.createElement("button"); b.className="wizpick";
-    b.innerHTML='<div class="wizpick-nm">'+esc(c.name)+'</div><div class="wizpick-sub">'+(c.subs?c.subs.length:0)+' 個小分類 · '+n+' 項</div>';
-    b.onclick=()=>{ wizBig=c.id; wizSub=null; const subs=c.subs||[]; if(subs.length===1){ wizSub=subs[0].name; wizStep=3; } else { wizStep=2; } renderCatalog(); _scrollCat(); };
-    wrap.appendChild(b);
-  });
-  body.appendChild(wrap);
-}
-
-// Step 2：小分類卡片（點了自動進下一步）
-function renderWizSub(body){
-  const big=(DB.categories||[]).find(c=>c.id===wizBig); if(!big){ wizStep=1; renderCatalog(); return; }
-  const wrap=document.createElement("div"); wrap.className="wizgrid";
-  (big.subs||[]).forEach(s=>{
-    const b=document.createElement("button"); b.className="wizpick";
-    b.innerHTML='<div class="wizpick-nm">'+esc(s.name)+'</div><div class="wizpick-sub">'+(s.items?s.items.length:0)+' 項</div>';
-    b.onclick=()=>{ wizSub=s.name; wizStep=3; renderCatalog(); _scrollCat(); };
-    wrap.appendChild(b);
-  });
-  body.appendChild(wrap);
-}
-
-// Step 3：只顯示所選小分類的品項
-function renderWizItems(body){
-  const big=(DB.categories||[]).find(c=>c.id===wizBig); if(!big){ wizStep=1; renderCatalog(); return; }
-  const sub=(big.subs||[]).find(s=>s.name===wizSub); if(!sub){ wizStep=2; renderCatalog(); return; }
-  const g=document.createElement("div");g.className="subgroup";
-  g.innerHTML=`<div class="subhead"><span class="tag">${esc(big.name)}</span><span class="cat-of">${esc(sub.name)}</span>
-    ${sub.name==="冷氣本體"?`<span class="subnote">選任一冷氣會自動附標配（整車配線、庫倫錶／遙控器、充電器）</span>`:""}
-    <span class="rule"></span></div>`;
-  const grid=document.createElement("div");grid.className="grid";
-  const car=_bizCar(); let shown=0;
-  (sub.items||[]).forEach(it=>{ if(!carAllowsItem(it.id,car))return; shown++; grid.appendChild(_buildItemCard(it)); });
-  if(!shown){ const e=document.createElement("div"); e.className="empty"; e.style.gridColumn="1/-1"; e.innerHTML="<b>這個分類目前沒有可選品項</b>可能被目前車型限制，換個分類或車型看看"; grid.appendChild(e); }
-  g.appendChild(grid); body.appendChild(g);
-}
-
-// 搜尋模式：跨全部品項（維持舊行為；清空搜尋就回到精靈）
-function renderCatSearch(q,body){
   const car=_bizCar(); let shown=0;
   (DB.categories||[]).forEach(cat=>{
+    const sec=document.createElement("div"); sec.className="catsec";
+    sec.innerHTML='<div class="catsec-h">'+esc(cat.name)+'</div>';
+    let catShown=0;
     (cat.subs||[]).forEach(sub=>{
-      const matches=(sub.items||[]).filter(it=>{ if(!carAllowsItem(it.id,car))return false; return (it.name+" "+(it.model||"")+" "+cat.name+" "+sub.name).toLowerCase().includes(q); });
+      const matches=(sub.items||[]).filter(it=>{
+        if(!carAllowsItem(it.id,car))return false;          // 車型限定品項
+        if(!q)return true;
+        return (it.name+" "+(it.model||"")+" "+cat.name+" "+sub.name).toLowerCase().includes(q);
+      });
       if(!matches.length)return;
       const g=document.createElement("div");g.className="subgroup";
-      g.innerHTML=`<div class="subhead"><span class="tag">${esc(cat.name)}</span><span class="cat-of">${esc(sub.name)}</span><span class="rule"></span></div>`;
+      g.innerHTML=`<div class="subhead"><span class="tag">${esc(sub.name)}</span>
+        ${sub.name==="冷氣本體"?`<span class="subnote">選任一冷氣會自動附標配（整車配線、庫倫錶／遙控器、充電器）</span>`:""}
+        <span class="rule"></span></div>`;
       const grid=document.createElement("div");grid.className="grid";
-      matches.forEach(it=>{ shown++; grid.appendChild(_buildItemCard(it)); });
-      g.appendChild(grid); body.appendChild(g);
+      matches.forEach(it=>{ shown++; catShown++; grid.appendChild(_buildItemCard(it)); });
+      g.appendChild(grid); sec.appendChild(g);
     });
+    if(catShown) body.appendChild(sec);
   });
-  if(!shown) body.innerHTML=`<div class="empty"><b>找不到符合的品項</b>換個關鍵字試試</div>`;
+  if(!shown) body.innerHTML=`<div class="empty"><b>${q?"找不到符合的品項":"目前沒有可選品項"}</b>${q?"換個關鍵字試試":"換個車型看看"}</div>`;
 }
 
 /* ---------- quote ---------- */
